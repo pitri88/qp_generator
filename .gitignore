@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media
+
+# Migrations (if you want to ignore them)
+**/migrations/*.py
+!**/migrations/__init__.py
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+myenv/
+
+# IDE
+.idea/
+.vscode/
+
+# React/Node
+node_modules/
+/client/build
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Media/Static files
+static/
+question_images/
+
+# Database
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
