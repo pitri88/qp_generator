@@ -122,7 +122,7 @@ export default function AdminCourseList() {
 
         <div className="card-grid">
           {courses.map((course) => (
-            <div key={course.course_id} className="course-card">
+            <div key={course.course_id} className="course-card" style={{ '--card-color': theme.colors.primary.main }}>
               <div className="card-header">
                 <span className="course-icon">📚</span>
                 <h3>{course.course_name}</h3>
@@ -199,6 +199,8 @@ export default function AdminCourseList() {
 
         .course-card {
           background: white;
+          --card-color: ${theme.colors.primary.main};
+          border-top: 4px solid var(--card-color);
           border-radius: ${theme.borderRadius.lg};
           overflow: hidden;
           box-shadow: ${theme.shadows.md};
@@ -211,33 +213,33 @@ export default function AdminCourseList() {
         }
 
         .card-header {
-          background: ${theme.colors.secondary.main};
-          color: white;
           padding: 1.5rem;
-          text-align: center;
-          position: relative;
+          border-bottom: 1px solid ${theme.colors.border.main};
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          color: var(--card-color);
         }
 
         .course-icon {
-          font-size: 2.5rem;
-          display: block;
-          margin-bottom: 0.5rem;
+          font-size: 1.5rem;
         }
 
         .card-header h3 {
           margin: 0;
+          flex: 1;
           font-size: 1.25rem;
+          color: inherit;
           font-weight: 600;
         }
 
         .course-id {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          background: rgba(255, 255, 255, 0.2);
-          padding: 0.25rem 0.5rem;
-          border-radius: ${theme.borderRadius.sm};
+          color: var(--card-color);
           font-size: 0.875rem;
+          padding: 0.25rem 0.75rem;
+          background: ${theme.colors.background.light};
+          border-radius: ${theme.borderRadius.full};
+          font-weight: 500;
         }
 
         .card-content {
@@ -262,7 +264,7 @@ export default function AdminCourseList() {
         .value {
           font-size: 1.25rem;
           font-weight: 600;
-          color: ${theme.colors.text.primary};
+          color: var(--card-color);
         }
 
         .card-actions {
@@ -283,21 +285,24 @@ export default function AdminCourseList() {
         }
 
         .edit-btn {
-          background: ${theme.colors.secondary.light};
+          background: var(--card-color);
           color: white;
         }
 
         .edit-btn:hover {
-          background: ${theme.colors.secondary.main};
+          filter: brightness(1.1);
+          transform: translateY(-1px);
         }
 
         .delete-btn {
           background: ${theme.colors.error.light};
-          color: white;
+          color: ${theme.colors.error.main};
         }
 
         .delete-btn:hover {
           background: ${theme.colors.error.main};
+          color: white;
+          transform: translateY(-1px);
         }
 
         .loading-screen, .error-screen {

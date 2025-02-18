@@ -57,19 +57,32 @@ export default function AdminDepartmentList() {
 
         <div className="card-grid">
           {departments.map((dept) => (
-            <div key={dept.dept_id} className="department-card">
+            <div key={dept.dept_id} className="department-card" style={{ '--card-color': theme.colors.warning.main }}>
               <div className="card-header">
                 <span className="dept-icon">🏢</span>
                 <h3>{dept.dept_name}</h3>
               </div>
               <div className="card-content">
-                <div className="stat-item">
-                  <span className="label">Courses</span>
-                  <span className="value">{dept.course_count}</span>
+                <div className="stat-container">
+                  <div className="stat-item">
+                    <span className="label">Courses</span>
+                    <span className="value">{dept.course_count}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="label">Faculty</span>
+                    <span className="value">{dept.faculty_count}</span>
+                  </div>
                 </div>
-                <div className="stat-item">
-                  <span className="label">Faculty</span>
-                  <span className="value">{dept.faculty_count}</span>
+                <div className="courses-list">
+                  <h4>Courses:</h4>
+                  <ul>
+                    {dept.courses.map((course) => (
+                      <li key={course.course_id}>
+                        <span className="course-id">{course.course_id}</span>
+                        <span className="course-name">{course.course_name}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
               <div className="card-actions">
@@ -125,6 +138,8 @@ export default function AdminDepartmentList() {
 
         .department-card {
           background: white;
+          --card-color: ${theme.colors.warning.main};
+          border-top: 4px solid var(--card-color);
           border-radius: ${theme.borderRadius.lg};
           overflow: hidden;
           box-shadow: ${theme.shadows.md};
@@ -137,29 +152,75 @@ export default function AdminDepartmentList() {
         }
 
         .card-header {
-          background: ${theme.colors.primary.main};
-          color: white;
           padding: 1.5rem;
-          text-align: center;
+          border-bottom: 1px solid ${theme.colors.border};
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          color: var(--card-color);
         }
 
         .dept-icon {
-          font-size: 2.5rem;
-          display: block;
-          margin-bottom: 0.5rem;
+          font-size: 1.5rem;
         }
 
         .card-header h3 {
           margin: 0;
+          flex: 1;
           font-size: 1.25rem;
+          color: inherit;
           font-weight: 600;
         }
 
         .card-content {
           padding: 1.5rem;
+        }
+
+        .stat-container {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .courses-list {
+          margin-top: 1rem;
+          padding-top: 1rem;
+          border-top: 1px solid ${theme.colors.border.light};
+        }
+
+        .courses-list h4 {
+          margin: 0 0 0.5rem 0;
+          color: ${theme.colors.text.primary};
+          font-size: 1rem;
+        }
+
+        .courses-list ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+
+        .courses-list li {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          border-radius: ${theme.borderRadius.md};
+          background: ${theme.colors.background.light};
+          margin-bottom: 0.5rem;
+          border: 1px solid ${theme.colors.border};
+        }
+
+        .course-id {
+          font-weight: 600;
+          color: var(--card-color);
+          min-width: 100px;
+        }
+
+        .course-name {
+          flex: 1;
+          color: ${theme.colors.text.secondary};
         }
 
         .stat-item {
@@ -176,7 +237,7 @@ export default function AdminDepartmentList() {
         .value {
           font-size: 1.5rem;
           font-weight: 600;
-          color: ${theme.colors.text.primary};
+          color: var(--card-color);
         }
 
         .card-actions {
@@ -197,21 +258,24 @@ export default function AdminDepartmentList() {
         }
 
         .edit-btn {
-          background: ${theme.colors.primary.light};
+          background: var(--card-color);
           color: white;
         }
 
         .edit-btn:hover {
-          background: ${theme.colors.primary.main};
+          filter: brightness(1.1);
+          transform: translateY(-1px);
         }
 
         .delete-btn {
           background: ${theme.colors.error.light};
-          color: white;
+          color: ${theme.colors.error.main};
         }
 
         .delete-btn:hover {
           background: ${theme.colors.error.main};
+          color: white;
+          transform: translateY(-1px);
         }
 
         .loading-screen, .error-screen {

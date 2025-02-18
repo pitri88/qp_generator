@@ -24,7 +24,7 @@ export default function AdminFacultyCourseAssign() {
       const [facultyRes, coursesRes, assignmentsRes] = await Promise.all([
         api.get('/faculty/'),
         api.get('/course/'),
-        api.get('/faculty-course/')
+        api.get('/faculty-courses/')
       ]);
       if (facultyRes.data.faculty) {
         setFaculty(facultyRes.data.faculty);
@@ -54,7 +54,7 @@ export default function AdminFacultyCourseAssign() {
     }
 
     try {
-      await api.post('/faculty-course/', {
+      await api.post('/faculty-courses/', {
         faculty_id: selectedFaculty,
         course_id: selectedCourse
       });
@@ -69,7 +69,7 @@ export default function AdminFacultyCourseAssign() {
   const handleUnassign = async (facultyId, courseId) => {
     if (window.confirm('Are you sure you want to remove this assignment?')) {
       try {
-        await api.delete('/faculty-course/', {
+        await api.delete('/faculty-courses/', {
           data: {
             faculty_id: facultyId,
             course_id: courseId

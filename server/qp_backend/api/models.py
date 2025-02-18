@@ -9,12 +9,11 @@ class CustomUser(AbstractUser):
         ('faculty', 'Faculty'),
     ]
     
-    # Remove default AbstractUser fields that are causing conflicts
-    first_name = None  # Remove first_name
-    last_name = None   # Remove last_name
-    date_joined = None # Remove date_joined
+    # Make these fields nullable instead of removing them
+    first_name = models.CharField(max_length=150, null=True, blank=True)
+    last_name = models.CharField(max_length=150, null=True, blank=True)
+    date_joined = models.DateTimeField(auto_now_add=True)
     
-    # Override fields that need customization
     username = models.CharField(max_length=150, unique=True)
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='faculty')
@@ -139,20 +138,23 @@ class Question(models.Model):
 class QuestionMedia(models.Model):
     qm_id = models.AutoField(primary_key=True)
     question_id = models.ForeignKey(
-        'Question', on_delete=models.CASCADE, related_name='media'
+        'Question', 
+        on_delete=models.CASCADE, 
+        related_name='media'
     )
-    image_paths = models.JSONField(blank=True, null=True)  # JSON field for image paths
-    equations = models.JSONField(blank=True, null=True)     # JSON field for equations
-'''
-    type = models.CharField(
-        max_length=50,
-        choices=[
-            ('Image', 'Image'), ('Graph', 'Graph'), 
-            ('Table', 'Table'), ('Equation', 'Equation'), ('Other', 'Other'),
-        ],
-    )
-    url = models.TextField()
-'''
+    image_paths = models.JSONField(default=list, blank=True, null=True)
+    equations = models.JSONField(default=list, blank=True, null=True)
+
+    def __str__(self):
+        return f"Media for Question {self.question_id.q_id}"
+
+    def save(self, *args, **kwargs):
+        # Ensure equations and image_paths are lists
+        if self.equations is None:
+            self.equations = []
+        if self.image_paths is None:
+            self.image_paths = []
+        super().save(*args, **kwargs)
 
 class Faculty(models.Model):
     f_id = models.CharField(max_length=50, primary_key=True)

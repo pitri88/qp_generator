@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from './Header';
-import Logo from '../images/profile.png';
+
 import { Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { api } from '../utils/api';
@@ -70,7 +70,7 @@ export default function TeacherDashboard() {
   if (loading) {
     return (
       <>
-        <Header name={localStorage.getItem('name')} page="Dashboard" logo={Logo} />
+        <Header page="Dashboard" />
         <div className="dashboard-page">
           <div className="loading">Loading courses...</div>
         </div>
@@ -80,7 +80,7 @@ export default function TeacherDashboard() {
 
   return (
     <>
-      <Header name={localStorage.getItem('name')} page="Dashboard" logo={Logo} />
+      <Header page="Faculty Dashboard" />
       <div className="dashboard-page">
         <div className="dashboard">
           <h1>Teacher Dashboard</h1>

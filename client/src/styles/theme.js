@@ -1,28 +1,29 @@
 export const theme = {
   colors: {
     primary: {
-      main: '#1a237e',     // Deep blue
-      light: '#534bae',
-      dark: '#000051',
-      contrastText: '#ffffff'
+      main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0'
     },
     secondary: {
-      main: '#0277bd',     // Light blue
-      light: '#58a5f0',
-      dark: '#004c8c',
-      contrastText: '#ffffff'
+      main: '#9c27b0',
+      light: '#ba68c8',
+      dark: '#7b1fa2'
     },
     error: {
-      main: '#dc2626',     // Red
-      light: '#ef4444',
-      dark: '#b91c1c',
-      contrastText: '#ffffff'
+      main: '#d32f2f',
+      light: '#ef5350',
+      dark: '#c62828'
+    },
+    warning: {
+      main: '#ed6c02',
+      light: '#ff9800',
+      dark: '#e65100'
     },
     success: {
-      main: '#059669',     // Green
-      light: '#10b981',
-      dark: '#047857',
-      contrastText: '#ffffff'
+      main: '#2e7d32',
+      light: '#4caf50',
+      dark: '#1b5e20'
     },
     background: {
       default: '#f3f4f6',  // Light gray
@@ -30,25 +31,20 @@ export const theme = {
       dark: '#1e293b'
     },
     text: {
-      primary: '#1e293b',  // Dark blue-gray
-      secondary: '#4a5568',
-      disabled: '#9ca3af'
+      primary: '#1a1a1a',
+      secondary: '#666666'
     },
-    border: {
-      light: '#e5e7eb',
-      main: '#d1d5db',
-      dark: '#9ca3af'
-    }
+    border: '#e0e0e0'
   },
   shadows: {
-    sm: '0 1px 2px rgba(0, 0, 0, 0.05)',
-    md: '0 4px 6px rgba(0, 0, 0, 0.1)',
-    lg: '0 10px 15px rgba(0, 0, 0, 0.1)'
+    sm: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+    md: '0 3px 6px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.12)',
+    lg: '0 10px 20px rgba(0,0,0,0.15), 0 3px 6px rgba(0,0,0,0.10)'
   },
   borderRadius: {
-    sm: '0.25rem',
-    md: '0.375rem',
-    lg: '0.5rem',
+    sm: '4px',
+    md: '8px',
+    lg: '12px',
     xl: '0.75rem',
     full: '9999px'
   },

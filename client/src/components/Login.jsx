@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import { theme } from '../styles/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 const styles = {
   loginContainer: {
@@ -71,6 +72,7 @@ const styles = {
 
 export default function Login({ user }) {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -97,21 +99,14 @@ export default function Login({ user }) {
       return;
     }
     try {
-      const response = await api.post('/login/', {
+      const userData = await login({
         username: formData.username,
         password: formData.password,
         role: user
       });
 
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('userRole', response.data.user.role);
-        // Set the token for future requests
-        api.defaults.headers.common['Authorization'] = `Token ${response.data.token}`;
-      }
-
       // Redirect based on user role
-      if (user === 'admin') {
+      if (userData.role === 'admin') {
         navigate('/admin-dashboard');
       } else {
         navigate('/faculty-dashboard');

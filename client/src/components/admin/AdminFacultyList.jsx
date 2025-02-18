@@ -9,97 +9,43 @@ import { Button } from '../common/Button';
 export default function AdminFacultyList() {
   const navigate = useNavigate();
   const [faculty, setFaculty] = useState([]);
-  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newFaculty, setNewFaculty] = useState({
-    f_id: '',
-    name: '',
-    email: '',
-    password: '',
-    department_id: ''
-  });
 
   useEffect(() => {
-    fetchData();
+    fetchFaculty();
   }, []);
 
-  const fetchData = async () => {
+  const fetchFaculty = async () => {
     try {
-      const [facultyResponse, deptsResponse] = await Promise.all([
-        api.get('/faculty/'),
-        api.get('/department/')
-      ]);
-      console.log('Faculty:', facultyResponse.data);
-      console.log('Departments:', deptsResponse.data);
-      setFaculty(facultyResponse.data.faculty);
-      setDepartments(deptsResponse.data.departments);
+      const response = await api.get('/faculty/');
+      console.log('Faculty:', response.data);
+      setFaculty(response.data.faculty || []);
       setLoading(false);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setError('Failed to load data');
+    } catch (err) {
+      console.error('Error fetching faculty:', err);
+      setError('Failed to load faculty data');
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      // Validate required fields
-      const requiredFields = ['f_id', 'name', 'email', 'password'];
-      const missingFields = requiredFields.filter(field => !newFaculty[field]);
-      
-      if (missingFields.length > 0) {
-        setError(`Missing required fields: ${missingFields.join(', ')}`);
-        return;
-      }
-
-      const response = await api.post('/faculty/', {
-        f_id: newFaculty.f_id,
-        name: newFaculty.name,
-        email: newFaculty.email,
-        password: newFaculty.password,
-        department_id: newFaculty.department_id || null
-      });
-
-      console.log('Faculty created:', response.data);
-      setNewFaculty({
-        f_id: '',
-        name: '',
-        email: '',
-        password: '',
-        department_id: ''
-      });
-      setError(null);
-      fetchData();
-    } catch (error) {
-      console.error('Error creating faculty:', error);
-      setError(error.response?.data?.error || 'Failed to create faculty');
-    }
-  };
-
-  const getDepartmentName = (deptId) => {
-    const dept = departments.find(d => d.dept_id === deptId);
-    return dept ? dept.dept_name : 'Not Assigned';
-  };
-
-  const handleDelete = async (facultyId) => {
+  const handleDelete = async (fId) => {
     if (window.confirm('Are you sure you want to delete this faculty member?')) {
       try {
-        await api.delete(`/faculty/${facultyId}/`);
-        fetchData();
-      } catch (error) {
-        setError(error.response?.data?.error || 'Failed to delete faculty');
+        await api.delete(`/faculty/${fId}/`);
+        fetchFaculty();
+      } catch (err) {
+        setError('Failed to delete faculty member');
       }
     }
   };
 
-  if (loading) return <div className="loading-screen"><div className="loading-spinner" /></div>;
-  if (error) return <div className="error-screen">{error}</div>;
+  if (loading) return <div className="loading">Loading faculty data...</div>;
+  if (error) return <div className="error">{error}</div>;
 
   return (
     <>
-      <Header name="Faculty" logo={Logo} />
+      <Header name="Faculty Management" logo={Logo} />
       <div className="container">
         <div className="header-section">
           <h1>Manage Faculty</h1>
@@ -111,44 +57,39 @@ export default function AdminFacultyList() {
           </Button>
         </div>
 
-        <div className="card-grid">
-          {faculty.map((member) => (
-            <div key={member.f_id} className="faculty-card">
+        <div className="faculty-grid">
+          {faculty.map((f) => (
+            <div key={f.f_id} className="faculty-card">
               <div className="card-header">
-                <span className="faculty-icon">👨‍🏫</span>
-                <h3>{member.name}</h3>
-                <div className="faculty-id">ID: {member.f_id}</div>
+                <h3>{f.name}</h3>
+                <p className="email">{f.email}</p>
               </div>
-              <div className="card-content">
-                <div className="info-item">
-                  <span className="label">Email</span>
-                  <span className="value">{member.email}</span>
-                </div>
-                <div className="info-item">
-                  <span className="label">Department</span>
-                  <span className="value">{getDepartmentName(member.department_id)}</span>
-                </div>
-                <div className="stats-container">
-                  <div className="stat-item">
-                    <span className="label">Courses</span>
-                    <span className="value">{member.course_count || 0}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="label">Papers</span>
-                    <span className="value">{member.paper_count || 0}</span>
-                  </div>
+
+              <div className="courses-section">
+                <h4>Assigned Courses ({f.course_count})</h4>
+                <div className="courses-list">
+                  {f.courses.map((course) => (
+                    <div key={course.course_id} className="course-item">
+                      <div className="course-info">
+                        <span className="course-code">{course.course_id}</span>
+                        <span className="course-name">{course.course_name}</span>
+                      </div>
+                      <span className="course-dept">{course.department_name}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+
               <div className="card-actions">
                 <button 
                   className="edit-btn"
-                  onClick={() => navigate(`/admin/faculty/${member.f_id}/edit`)}
+                  onClick={() => navigate(`/admin/faculty/${f.f_id}/edit`)}
                 >
                   Edit
                 </button>
                 <button 
                   className="delete-btn"
-                  onClick={() => handleDelete(member.f_id)}
+                  onClick={() => handleDelete(f.f_id)}
                 >
                   Delete
                 </button>
@@ -158,13 +99,11 @@ export default function AdminFacultyList() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .container {
           padding: 2rem;
-          max-width: 1400px;
+          max-width: 1200px;
           margin: 0 auto;
-          min-height: calc(100vh - 64px);
-          background: ${theme.colors.background.light};
         }
 
         .header-section {
@@ -172,166 +111,120 @@ export default function AdminFacultyList() {
           justify-content: space-between;
           align-items: center;
           margin-bottom: 2rem;
-          background: white;
-          padding: 1.5rem 2rem;
-          border-radius: ${theme.borderRadius.lg};
-          box-shadow: ${theme.shadows.md};
         }
 
-        .header-section h1 {
-          color: ${theme.colors.primary.main};
-          margin: 0;
-          font-size: 2rem;
-        }
-
-        .card-grid {
+        .faculty-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
           gap: 2rem;
         }
 
         .faculty-card {
           background: white;
+          --card-color: ${theme.colors.success.main};
+          border-top: 4px solid var(--card-color);
           border-radius: ${theme.borderRadius.lg};
-          overflow: hidden;
           box-shadow: ${theme.shadows.md};
-          transition: all 0.3s ease;
-        }
-
-        .faculty-card:hover {
-          transform: translateY(-5px);
-          box-shadow: ${theme.shadows.lg};
+          overflow: hidden;
         }
 
         .card-header {
-          background: ${theme.colors.success.main};
-          color: white;
           padding: 1.5rem;
-          text-align: center;
-          position: relative;
-        }
-
-        .faculty-icon {
-          font-size: 2.5rem;
-          display: block;
-          margin-bottom: 0.5rem;
+          border-bottom: 1px solid ${theme.colors.border};
+          color: var(--card-color);
         }
 
         .card-header h3 {
           margin: 0;
           font-size: 1.25rem;
-          font-weight: 600;
         }
 
-        .faculty-id {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          background: rgba(255, 255, 255, 0.2);
-          padding: 0.25rem 0.5rem;
-          border-radius: ${theme.borderRadius.sm};
-          font-size: 0.875rem;
+        .email {
+          margin: 0.5rem 0 0;
+          font-size: 0.9rem;
+          color: ${theme.colors.text.secondary};
         }
 
-        .card-content {
+        .courses-section {
           padding: 1.5rem;
         }
 
-        .info-item {
-          margin-bottom: 1rem;
-        }
-
-        .stats-container {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          margin-top: 1rem;
-          padding-top: 1rem;
-          border-top: 1px solid ${theme.colors.border};
-        }
-
-        .stat-item {
-          text-align: center;
-          padding: 0.5rem;
-          background: ${theme.colors.background.light};
-          border-radius: ${theme.borderRadius.md};
-        }
-
-        .label {
-          display: block;
-          color: ${theme.colors.text.secondary};
-          font-size: 0.875rem;
-          margin-bottom: 0.25rem;
-        }
-
-        .value {
-          font-size: 1.1rem;
-          font-weight: 600;
+        .courses-section h4 {
+          margin: 0 0 1rem 0;
           color: ${theme.colors.text.primary};
-          word-break: break-word;
+        }
+
+        .courses-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .course-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem 1rem;
+          background: ${theme.colors.background.default};
+          border-radius: ${theme.borderRadius.md};
+          border: 1px solid ${theme.colors.border};
+        }
+
+        .course-info {
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+        }
+
+        .course-code {
+          font-weight: 600;
+          color: var(--card-color);
+          font-size: 0.9rem;
+        }
+
+        .course-name {
+          color: ${theme.colors.text.primary};
+        }
+
+        .course-dept {
+          padding: 0.25rem 0.75rem;
+          background: ${theme.colors.background.light};
+          color: var(--card-color);
+          border-radius: ${theme.borderRadius.full};
+          font-size: 0.8rem;
+          font-weight: 500;
         }
 
         .card-actions {
-          padding: 1rem;
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 1rem;
+          padding: 1rem 1.5rem;
+          background: ${theme.colors.background.default};
           border-top: 1px solid ${theme.colors.border};
         }
 
         .edit-btn, .delete-btn {
-          padding: 0.75rem;
+          padding: 0.5rem;
           border: none;
           border-radius: ${theme.borderRadius.md};
           cursor: pointer;
           font-weight: 500;
-          transition: all 0.2s;
+          transition: opacity 0.2s;
+        }
+
+        .edit-btn:hover, .delete-btn:hover {
+          opacity: 0.9;
         }
 
         .edit-btn {
-          background: ${theme.colors.success.light};
+          background: ${theme.colors.primary.main};
           color: white;
-        }
-
-        .edit-btn:hover {
-          background: ${theme.colors.success.main};
         }
 
         .delete-btn {
-          background: ${theme.colors.error.light};
-          color: white;
-        }
-
-        .delete-btn:hover {
           background: ${theme.colors.error.main};
-        }
-
-        .loading-screen, .error-screen {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: calc(100vh - 64px);
-          font-size: 1.2rem;
-        }
-
-        .loading-spinner {
-          width: 50px;
-          height: 50px;
-          border: 5px solid ${theme.colors.background.default};
-          border-top: 5px solid ${theme.colors.success.main};
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        .error-screen {
-          color: ${theme.colors.error.main};
-          text-align: center;
-          padding: 2rem;
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          color: white;
         }
       `}</style>
     </>

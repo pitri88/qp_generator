@@ -7,45 +7,41 @@ import Logo from '../../images/profile.png';
 export default function FacultyForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    faculty_name: '',
+  const [formData, setFormData] = useState(() => ({
+    name: '',
     email: '',
-    password: '',
-    dept_id: ''
-  });
-  const [departments, setDepartments] = useState([]);
+    password: ''
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Reset form data when component mounts or id changes
   useEffect(() => {
-    fetchDepartments();
+    setFormData({
+      name: '',
+      email: '',
+      password: ''
+    });
+    
     if (id) {
       fetchFaculty();
     }
   }, [id]);
 
-  const fetchDepartments = async () => {
-    try {
-      const response = await api.get('/department/');
-      setDepartments(response.data.departments);
-    } catch (error) {
-      setError('Failed to fetch departments');
-    }
-  };
-
   const fetchFaculty = async () => {
     try {
       const response = await api.get('/faculty/', {
-        params: { faculty_id: id }
+        params: { f_id: id }
       });
-      const faculty = response.data.faculty.find(f => f.faculty_id === id);
+      const faculty = response.data.faculty;
       if (faculty) {
         setFormData({
-          faculty_name: faculty.faculty_name,
+          name: faculty.name,
           email: faculty.email,
-          password: '',
-          dept_id: faculty.dept_id
+          password: ''
         });
+      } else {
+        setError('Faculty not found');
       }
     } catch (error) {
       setError('Failed to fetch faculty details');
@@ -60,13 +56,21 @@ export default function FacultyForm() {
     try {
       if (id) {
         await api.put('/faculty/', {
-          faculty_id: id,
-          ...formData
+          faculty_id: id,  // Backend expects faculty_id in PUT request
+          name: formData.name,
+          email: formData.email,
+          password: formData.password
         });
       } else {
-        await api.post('/faculty/', formData);
+        // For new faculty, send all required fields
+        await api.post('/faculty/', {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password
+        });
       }
-      navigate('/admin-dashboard');
+      // Navigate to faculty list after successful submission
+      navigate('/admin/faculty');
     } catch (error) {
       setError(error.response?.data?.error || 'Failed to save faculty');
     } finally {
@@ -93,14 +97,15 @@ export default function FacultyForm() {
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="faculty_name">Faculty Name</label>
+            <label htmlFor="name">Faculty Name</label>
             <input
               type="text"
-              id="faculty_name"
-              name="faculty_name"
-              value={formData.faculty_name}
+              id="name"
+              name="name"
+              value={formData.name}
               onChange={handleChange}
               required
+              className="form-control"
             />
           </div>
 
@@ -113,6 +118,7 @@ export default function FacultyForm() {
               value={formData.email}
               onChange={handleChange}
               required
+              className="form-control"
             />
           </div>
 
@@ -127,41 +133,16 @@ export default function FacultyForm() {
               value={formData.password}
               onChange={handleChange}
               required={!id}
+              className="form-control"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="dept_id">Department</label>
-            <select
-              id="dept_id"
-              name="dept_id"
-              value={formData.dept_id}
-              onChange={handleChange}
-              required
-            >
-              <option value="">Select Department</option>
-              {departments.map(dept => (
-                <option key={dept.dept_id} value={dept.dept_id}>
-                  {dept.dept_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-actions">
-            <button 
-              type="button" 
-              onClick={() => navigate('/admin-dashboard')}
-              className="cancel-button"
-            >
+          <div className="button-group">
+            <button type="button" onClick={() => navigate('/admin/faculty')} className="btn btn-secondary">
               Cancel
             </button>
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="submit-button"
-            >
-              {loading ? 'Saving...' : (id ? 'Update Faculty' : 'Add Faculty')}
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {id ? 'Update Faculty' : 'Add Faculty'}
             </button>
           </div>
         </form>
@@ -207,7 +188,7 @@ export default function FacultyForm() {
           font-weight: 500;
         }
 
-        input, select {
+        input {
           width: 100%;
           padding: 0.5rem;
           border: 1px solid #ddd;
@@ -215,13 +196,13 @@ export default function FacultyForm() {
           font-size: 1rem;
         }
 
-        input:focus, select:focus {
+        input:focus {
           border-color: #417690;
           outline: none;
           box-shadow: 0 0 0 2px rgba(65,118,144,0.2);
         }
 
-        .form-actions {
+        .button-group {
           display: flex;
           justify-content: flex-end;
           gap: 1rem;
@@ -237,27 +218,27 @@ export default function FacultyForm() {
           transition: background-color 0.2s;
         }
 
-        .submit-button {
+        .btn-primary {
           background: #417690;
           color: white;
         }
 
-        .submit-button:hover {
+        .btn-primary:hover {
           background: #205067;
         }
 
-        .submit-button:disabled {
+        .btn-primary:disabled {
           background: #97a5ac;
           cursor: not-allowed;
         }
 
-        .cancel-button {
+        .btn-secondary {
           background: #f8f9fa;
           color: #2c3e50;
           border: 1px solid #ddd;
         }
 
-        .cancel-button:hover {
+        .btn-secondary:hover {
           background: #e9ecef;
         }
       `}</style>

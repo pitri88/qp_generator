@@ -31,6 +31,7 @@ export default function QuestionPaperForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filteredQuestions, setFilteredQuestions] = useState([]);
+  const [courseInfo, setCourseInfo] = useState(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -49,7 +50,7 @@ export default function QuestionPaperForm() {
 
       try {
         // First check course access
-        const mappingResponse = await api.get('/faculty-course/');
+        const mappingResponse = await api.get('/faculty-courses/');
         const mappings = mappingResponse.data.mappings;
         const hasCourseAccess = mappings.some(mapping => mapping.course_id === courseId);
         
@@ -90,32 +91,30 @@ export default function QuestionPaperForm() {
     checkAuth();
   }, [courseId, navigate]);
 
-  // Update the useEffect for fetching questions
   useEffect(() => {
-    const fetchQuestions = async () => {
-      try {
-        const response = await api.get('/questions/', {
-          params: {
-            course_id: courseId
-          }
-        });
-        console.log('Questions response:', response.data);
-        setQuestions(response.data || []);
-        setFilteredQuestions(response.data || []); // Initialize filtered questions with all questions
-      } catch (error) {
-        console.error('Error fetching questions:', error);
-        if (error.response?.status === 403 || error.response?.status === 401) {
-          navigate('/login-faculty');
-          return;
-        }
-        setError('Failed to fetch questions. Please try again.');
-      }
-    };
+    fetchQuestions();
+  }, [courseId]);
 
-    if (courseId) {
-      fetchQuestions();
+  const fetchQuestions = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get(`/course/${courseId}/questions/`);
+      console.log('Questions response:', response.data);
+      
+      if (response.data && Array.isArray(response.data.questions)) {
+        setQuestions(response.data.questions);
+        setFilteredQuestions(response.data.questions);
+        setCourseInfo(response.data.course);
+      } else {
+        throw new Error('Invalid questions data format');
+      }
+    } catch (err) {
+      console.error('Error fetching questions:', err);
+      setError('Failed to fetch questions');
+    } finally {
+      setLoading(false);
     }
-  }, [courseId, navigate]);
+  };
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -125,54 +124,33 @@ export default function QuestionPaperForm() {
     }));
   };
 
-  const applyFilters = () => {
-    console.log('Applying filters:', filters);
-    console.log('Sample question structure:', questions[0]); // Log the structure of a question
-    
-    let filtered = [...questions];
-    
-    if (filters.unit) {
-      const units = filters.unit.split(',').map(u => u.trim());
-      console.log('Filtering by units:', units);
-      filtered = filtered.filter(q => {
-        const match = q.unit_id && units.includes(q.unit_id.toString());
-        console.log(`Question ${q.id}: unit_id=${q.unit_id}, match=${match}`);
-        return match;
-      });
+  const applyFilters = async () => {
+    setLoading(true);
+    try {
+      const filterData = {
+        course_id: courseId,
+        unit_numbers: filters.unit ? filters.unit.split(',').map(u => u.trim()) : [],
+        cos: filters.co ? filters.co.split(',').map(co => co.trim()) : [],
+        bts: filters.bt ? filters.bt.split(',').map(bt => bt.trim()) : [],
+        marks: filters.marks ? filters.marks.split(',').map(m => parseInt(m.trim())).filter(m => !isNaN(m)) : []
+      };
+
+      console.log('Sending filter request:', filterData);
+      const response = await api.post(`/course/${courseId}/filter-questions/`, filterData);
+      
+      if (response.data && response.data.questions) {
+        console.log('Filtered questions:', response.data.questions);
+        setFilteredQuestions(response.data.questions);
+      } else {
+        console.error('Invalid response format:', response.data);
+        setError('Failed to filter questions');
+      }
+    } catch (error) {
+      console.error('Error applying filters:', error);
+      setError('Failed to filter questions. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    if (filters.co) {
-      const cos = filters.co.split(',').map(co => co.trim());
-      console.log('Filtering by COs:', cos);
-      filtered = filtered.filter(q => {
-        const match = q.co && cos.includes(q.co.toString());
-        console.log(`Question ${q.id}: co=${q.co}, match=${match}`);
-        return match;
-      });
-    }
-    
-    if (filters.bt) {
-      const bts = filters.bt.split(',').map(bt => bt.trim());
-      console.log('Filtering by BTs:', bts);
-      filtered = filtered.filter(q => {
-        const match = q.bt && bts.includes(q.bt.toString());
-        console.log(`Question ${q.id}: bt=${q.bt}, match=${match}`);
-        return match;
-      });
-    }
-    
-    if (filters.marks) {
-      const marksList = filters.marks.split(',').map(m => parseInt(m.trim())).filter(m => !isNaN(m));
-      console.log('Filtering by marks:', marksList);
-      filtered = filtered.filter(q => {
-        const match = q.marks && marksList.includes(parseInt(q.marks.toString()));
-        console.log(`Question ${q.id}: marks=${q.marks}, match=${match}`);
-        return match;
-      });
-    }
-    
-    console.log('Questions after filtering:', filtered);
-    setFilteredQuestions(filtered);
   };
 
   const handleQuestionSelect = (questionId, part) => {
@@ -275,6 +253,19 @@ export default function QuestionPaperForm() {
       setLoading(false);
     }
   };
+
+  const handleFilter = (filteredData) => {
+    if (Array.isArray(filteredData)) {
+      setFilteredQuestions(filteredData);
+    } else {
+      console.error('Filtered data is not an array:', filteredData);
+      setFilteredQuestions([]);  // Set to empty array if invalid data
+    }
+  };
+
+  if (loading) return <div className="loading">Loading questions...</div>;
+  if (error) return <div className="error">{error}</div>;
+  if (!Array.isArray(filteredQuestions)) return <div className="error">Invalid questions data</div>;
 
   return (
     <>

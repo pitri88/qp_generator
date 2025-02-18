@@ -37,11 +37,16 @@ class QuestionPaperGenerator:
             if os.path.exists(image_path):
                 run = paragraph.add_run()
                 picture = run.add_picture(image_path)
-                max_width = Inches(6)
-                if picture.width > max_width:
-                    aspect_ratio = picture.height / picture.width
-                    picture.width = max_width
-                    picture.height = int(max_width * aspect_ratio)
+                
+                # Fixed dimensions for all images
+                fixed_width = Inches(3.0)  # 3 inches width
+                fixed_height = Inches(2.0)  # 2 inches height
+                
+                picture.width = fixed_width
+                picture.height = fixed_height
+                
+                # Add some spacing after the image
+                run.add_text('\n')
         except Exception as e:
             logging.error(f"Error adding image: {e}")
             paragraph.add_run(f"[Image: {os.path.basename(image_path)}]")
@@ -87,8 +92,9 @@ class QuestionPaperGenerator:
                 question_data = next(q for q in questions_data if q.q_id == selection.question.q_id)
                 row_cells = table.add_row().cells
                 
-                # Question number
+                # Question number - keep it compact
                 QuestionPaperGenerator.format_table_cell(row_cells[0], str(i), WD_ALIGN_PARAGRAPH.CENTER)
+                row_cells[0].width = Inches(0.5)  # Fixed width for question number
                 
                 # Question content cell
                 question_cell = row_cells[1]
@@ -126,11 +132,17 @@ class QuestionPaperGenerator:
         partA_table = doc.add_table(rows=1, cols=5)
         partA_table.style = 'Table Grid'
         
-        # Set header row
+        # Set header row and column widths
         header_cells = partA_table.rows[0].cells
         headers = ['Q. No.', 'Questions', 'M', 'BT', 'CO']
-        for i, text in enumerate(headers):
-            QuestionPaperGenerator.format_table_cell(header_cells[i], text, WD_ALIGN_PARAGRAPH.CENTER)
+        widths = [Inches(0.5), Inches(5.0), Inches(0.4), Inches(0.4), Inches(0.4)]
+        
+        for i, (text, width) in enumerate(zip(headers, widths)):
+            cell = header_cells[i]
+            QuestionPaperGenerator.format_table_cell(cell, text, WD_ALIGN_PARAGRAPH.CENTER)
+            # Set column width
+            for row in partA_table.rows:
+                row.cells[i].width = width
 
         # Add Part A questions
         partA_questions = [q for q in selected_questions if q.part == 'A']
@@ -144,8 +156,12 @@ class QuestionPaperGenerator:
         partB_table.style = 'Table Grid'
         
         header_cells = partB_table.rows[0].cells
-        for i, text in enumerate(headers):
-            QuestionPaperGenerator.format_table_cell(header_cells[i], text, WD_ALIGN_PARAGRAPH.CENTER)
+        for i, (text, width) in enumerate(zip(headers, widths)):
+            cell = header_cells[i]
+            QuestionPaperGenerator.format_table_cell(cell, text, WD_ALIGN_PARAGRAPH.CENTER)
+            # Set column width
+            for row in partB_table.rows:
+                row.cells[i].width = width
 
         # Add Part B questions
         partB_questions = [q for q in selected_questions if q.part == 'B']

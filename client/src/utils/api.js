@@ -69,7 +69,9 @@ api.interceptors.response.use(
                 
                 // Only redirect if not already on a login page
                 if (!window.location.pathname.includes('login')) {
-                    window.location.href = '/login-faculty';
+                    // Determine the appropriate login page based on stored role
+                    const userRole = localStorage.getItem('userRole');
+                    window.location.href = userRole === 'admin' ? '/login-admin' : '/login-faculty';
                 }
             }
         }

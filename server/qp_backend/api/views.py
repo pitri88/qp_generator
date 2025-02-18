@@ -9,7 +9,11 @@ from django.contrib.auth.models import update_last_login
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view, 
+    permission_classes, 
+    parser_classes
+)
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.authentication import TokenAuthentication
 
@@ -112,22 +116,18 @@ class CustomPagination(PageNumberPagination):
 @role_required(['admin'])
 def admin_dashboard_view(request):
     try:
-        # Get counts from database
+        # Get counts from database - removed questions count
         stats = {
             'departments': Department.objects.count(),
             'courses': Course.objects.count(),
-            'faculty': Faculty.objects.count(),
-            'questions': Question.objects.count()
+            'faculty': Faculty.objects.count()
         }
 
-        # Get analytics data
+        # Get analytics data - removed questions_by_difficulty
         analytics = {
             'questions_by_course': Course.objects.annotate(
                 question_count=Count('questions')
             ).values('course_name', 'question_count'),
-            'questions_by_difficulty': Question.objects.values('difficulty_level').annotate(
-                count=Count('q_id')
-            ),
             'papers_generated': PaperMetadata.objects.values('course_code').annotate(
                 count=Count('id')
             ),
@@ -140,6 +140,7 @@ def admin_dashboard_view(request):
             'stats': stats,
             'analytics': analytics
         })
+
     except Exception as e:
         print(f"Error in admin dashboard: {str(e)}")
         return Response({'error': str(e)}, status=500)
@@ -158,18 +159,27 @@ class FacultyDashboardView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            faculty_profile = request.user.faculty_profile
-            print(f"Found faculty profile: {faculty_profile.f_id}")
-            
-            # Debug: Print all courses in the system
-            all_courses = Course.objects.all()
-            print("\nAll courses in system:")
-            for course in all_courses:
-                print(f"Course Code: {course.course_id}, Name: {course.course_name}")
-            
-            # Get faculty course mappings
-            faculty_courses = FacultyCourse.objects.filter(faculty_id=faculty_profile.f_id)
-            print(f"\nFound {faculty_courses.count()} faculty course mappings")
+            try:
+                faculty_profile = Faculty.objects.get(email=request.user.email)
+                print(f"Found faculty profile: {faculty_profile.f_id}")
+                
+                # Debug: Print all courses in the system
+                all_courses = Course.objects.all()
+                print("\nAll courses in system:")
+                for course in all_courses:
+                    print(f"Course Code: {course.course_id}, Name: {course.course_name}")
+                
+                # Get faculty course mappings
+                faculty_courses = FacultyCourse.objects.filter(faculty_id=faculty_profile.f_id)
+                print(f"\nFound {faculty_courses.count()} faculty course mappings")
+            except Faculty.DoesNotExist:
+                print(f"Faculty profile not found for user {request.user.email}")
+                return Response({
+                    'faculty_id': None,
+                    'name': f"{request.user.first_name} {request.user.last_name}".strip(),
+                    'email': request.user.email,
+                    'courses': []
+                })
             
             courses_data = []
             for fc in faculty_courses:
@@ -197,12 +207,11 @@ class FacultyDashboardView(APIView):
             if not courses_data:
                 print("No valid courses found for faculty")
                 return Response({
-                    "error": "No valid courses found for faculty",
                     'faculty_id': faculty_profile.f_id,
                     'name': faculty_profile.name,
                     'email': faculty_profile.email,
                     'courses': []
-                }, status=status.HTTP_404_NOT_FOUND)
+                })
 
             print(f"\nReturning {len(courses_data)} courses")
             return Response({
@@ -220,74 +229,58 @@ class FacultyDashboardView(APIView):
 
 
 # For login
-class LoginView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []  # No authentication required for login
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_view(request):
+    try:
+        email = request.data.get('username')  # Form sends username but it's actually email
+        password = request.data.get('password')
 
-    @method_decorator(csrf_exempt)  # Temporarily disable CSRF for testing
-    @method_decorator(ratelimit(key='ip', rate='5/m', block=True))
-    def post(self, request):
+        if not email or not password:
+            return Response({
+                'error': 'Email and password are required'
+            }, status=400)
+
         try:
-            username = request.data.get('username')
-            password = request.data.get('password')
-            role = request.data.get('role')
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            return Response({
+                'error': 'Invalid credentials'
+            }, status=401)
 
-            if not all([username, password, role]):
-                return Response(
-                    {"error": "Username, password, and role are required."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        if not user.check_password(password):
+            return Response({
+                'error': 'Invalid credentials'
+            }, status=401)
 
-            if role not in ['admin', 'faculty']:
-                return Response(
-                    {"error": "Invalid role. Must be either 'admin' or 'faculty'."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            user = authenticate(username=username, password=password)
-            
-            if not user:
-                return Response(
-                    {"error": "Invalid credentials"}, 
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-
-            if not user.is_active:
-                return Response(
-                    {"error": "User account is inactive."}, 
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            if user.role != role:
-                return Response(
-                    {"error": f"User does not have the '{role}' role."}, 
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            login(request, user)
-            update_last_login(None, user)
-            
-            # Create or get the auth token
-            token, _ = Token.objects.get_or_create(user=user)
-            
-            response_data = {
-                "message": "Login successful",
-                "token": token.key,
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "role": user.role
-                }
+        token, _ = Token.objects.get_or_create(user=user)
+        
+        # Get the correct name based on user role
+        if user.role == 'faculty':
+            try:
+                faculty = Faculty.objects.get(email=user.email)
+                name = faculty.name
+            except Faculty.DoesNotExist:
+                name = f"{user.first_name} {user.last_name}".strip()
+        else:
+            name = f"{user.first_name} {user.last_name}".strip()
+        
+        return Response({
+            'token': token.key,
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'role': user.role,
+                'name': name,
+                'first_name': user.first_name,
+                'last_name': user.last_name
             }
-            
-            return Response(response_data, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response(
-                {"error": "An unexpected error occurred during login."}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        })
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        return Response({
+            'error': 'Login failed'
+        }, status=400)
 
 
 # Logout View
@@ -325,49 +318,90 @@ class LogoutAllDevicesView(APIView):
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @method_decorator(login_required)
-    @method_decorator(csrf_protect)
-    def dispatch(self, *args, **kwargs):
-        return super().dispatch(*args, **kwargs)
-
     def get(self, request):
         try:
-            if request.user.role == 'faculty':
-                profile = Faculty.objects.filter(user=request.user).first()
-                if not profile:
-                    return Response({"error": "Faculty profile not found."},
-                                    status=status.HTTP_404_NOT_FOUND)
-                serializer = FacultySerializer(profile)
-            elif request.user.role == 'admin':
-                serializer = AdminSerializer(request.user)
-            else:
-                return Response({"error": "Invalid role detected."},
-                                status=status.HTTP_403_FORBIDDEN)
-            return Response(serializer.data)
+            user = request.user
+            # Get the correct name based on user role
+            if user.role == 'faculty':
+                try:
+                    faculty = Faculty.objects.get(email=user.email)
+                    name = faculty.name  # Use faculty name from Faculty model
+                except Faculty.DoesNotExist:
+                    name = f"{user.first_name} {user.last_name}".strip()
+                
+                data = {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': name,  # Use the correct name
+                    'role': user.role,
+                    'faculty_id': faculty.f_id,
+                    'department': faculty.department_id.dept_name if faculty.department_id else None,
+                    'courses': [{
+                        'course_id': fc.course_id.course_id,
+                        'course_name': fc.course_id.course_name,
+                        'department': fc.course_id.department_id.dept_name if fc.course_id.department_id else None
+                    } for fc in FacultyCourse.objects.filter(faculty_id=faculty)]
+                }
+            else:  # admin
+                data = {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': f"{user.first_name} {user.last_name}".strip(),
+                    'role': user.role
+                }
+            
+            return Response(data)
         except Exception as e:
-            return Response({"error": "Failed to load profile."}, 
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"Error fetching profile: {str(e)}")
+            return Response({'error': str(e)}, status=400)
 
     def put(self, request):
         try:
-            if request.user.role == 'faculty':
-                profile = Faculty.objects.filter(user=request.user).first()
-                if not profile:
-                    return Response({"error": "Faculty profile not found."}, 
-                                    status=status.HTTP_404_NOT_FOUND)
-                serializer = FacultySerializer(profile, data=request.data, partial=True)
-            elif request.user.role == 'admin':
-                serializer = AdminSerializer(request.user, data=request.data, partial=True)
-            else:
-                return Response({"error": "Invalid role."}, status=status.HTTP_403_FORBIDDEN)
+            user = request.user
+            data = request.data
 
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Update basic user info
+            if 'first_name' in data:
+                user.first_name = data['first_name']
+            if 'last_name' in data:
+                user.last_name = data['last_name']
+            if 'email' in data:
+                user.email = data['email']
+                user.username = data['email']
+
+            user.save()
+
+            # Update faculty-specific info if applicable
+            if user.role == 'faculty':
+                faculty = Faculty.objects.get(email=user.email)
+                if 'name' in data:
+                    faculty.name = data['name']
+                if 'email' in data:
+                    faculty.email = data['email']
+                faculty.save()
+
+            # Get updated name based on role
+            if user.role == 'faculty':
+                try:
+                    faculty = Faculty.objects.get(email=user.email)
+                    name = faculty.name
+                except Faculty.DoesNotExist:
+                    name = f"{user.first_name} {user.last_name}".strip()
+            else:
+                name = f"{user.first_name} {user.last_name}".strip()
+
+            return Response({
+                'message': 'Profile updated successfully',
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': name,
+                    'role': user.role
+                }
+            })
         except Exception as e:
-            return Response({"error": "Failed to update profile."}, 
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"Error updating profile: {str(e)}")
+            return Response({'error': str(e)}, status=400)
 
 
 # Secure APIView with session authentication
@@ -403,21 +437,37 @@ def department_view(request, dept_id=None):
         try:
             if dept_id:
                 department = Department.objects.get(dept_id=dept_id)
+                courses = Course.objects.filter(department_id=department)
+                courses_data = [{
+                    'course_id': course.course_id,
+                    'course_name': course.course_name
+                } for course in courses]
+                
                 data = {
                     'dept_id': department.dept_id,
                     'dept_name': department.dept_name,
                     'course_count': department.get_course_count(),
-                    'faculty_count': department.get_faculty_count()
+                    'faculty_count': department.get_faculty_count(),
+                    'courses': courses_data
                 }
                 return Response({'department': data})
             else:
                 departments = Department.objects.all()
-                data = [{
-                    'dept_id': dept.dept_id,
-                    'dept_name': dept.dept_name,
-                    'course_count': dept.get_course_count(),
-                    'faculty_count': dept.get_faculty_count()
-                } for dept in departments]
+                data = []
+                for dept in departments:
+                    courses = Course.objects.filter(department_id=dept)
+                    courses_data = [{
+                        'course_id': course.course_id,
+                        'course_name': course.course_name
+                    } for course in courses]
+                    
+                    data.append({
+                        'dept_id': dept.dept_id,
+                        'dept_name': dept.dept_name,
+                        'course_count': dept.get_course_count(),
+                        'faculty_count': dept.get_faculty_count(),
+                        'courses': courses_data
+                    })
                 return Response({'departments': data})
         except Department.DoesNotExist:
             return Response({'error': 'Department not found'}, status=404)
@@ -442,6 +492,38 @@ def department_view(request, dept_id=None):
         except Exception as e:
             return Response({'error': str(e)}, status=400)
 
+    elif request.method == 'PUT':
+        try:
+            data = request.data
+            print(f"Received department update data: {data}")
+            
+            dept_id = data.get('dept_id')
+            if not dept_id:
+                return Response({'error': 'Department ID is required'}, status=400)
+            
+            department = Department.objects.get(dept_id=dept_id)
+            
+            # Update department name if provided
+            if 'dept_name' in data:
+                department.dept_name = data['dept_name']
+            
+            department.save()
+
+            return Response({
+                'message': 'Department updated successfully',
+                'department': {
+                    'dept_id': department.dept_id,
+                    'dept_name': department.dept_name,
+                    'course_count': department.get_course_count(),
+                    'faculty_count': department.get_faculty_count()
+                }
+            })
+        except Department.DoesNotExist:
+            return Response({'error': 'Department not found'}, status=404)
+        except Exception as e:
+            print(f"Error updating department: {str(e)}")
+            return Response({'error': str(e)}, status=400)
+
     return Response({'error': 'Method not allowed'}, status=405)
 
 
@@ -454,27 +536,38 @@ def course_view(request, course_id=None):
         try:
             if course_id:
                 course = Course.objects.get(course_id=course_id)
+                # Get counts
+                unit_count = Unit.objects.filter(course_id=course).count()
+                question_count = Question.objects.filter(unit_id__course_id=course).count()
+                faculty_count = FacultyCourse.objects.filter(course_id=course).count()
+
                 data = {
                     'course_id': course.course_id,
                     'course_name': course.course_name,
                     'department_id': course.department_id.dept_id if course.department_id else None,
                     'department_name': course.get_department_name(),
-                    'question_count': course.get_question_count(),
-                    'unit_count': course.get_unit_count(),
-                    'faculty_count': course.get_faculty_count()
+                    'unit_count': unit_count,
+                    'question_count': question_count,
+                    'faculty_count': faculty_count
                 }
                 return Response({'course': data})
             else:
                 courses = Course.objects.all()
-                data = [{
-                    'course_id': course.course_id,
-                    'course_name': course.course_name,
-                    'department_id': course.department_id.dept_id if course.department_id else None,
-                    'department_name': course.get_department_name(),
-                    'question_count': course.get_question_count(),
-                    'unit_count': course.get_unit_count(),
-                    'faculty_count': course.get_faculty_count()
-                } for course in courses]
+                data = []
+                for course in courses:
+                    unit_count = Unit.objects.filter(course_id=course).count()
+                    question_count = Question.objects.filter(unit_id__course_id=course).count()
+                    faculty_count = FacultyCourse.objects.filter(course_id=course).count()
+                    
+                    data.append({
+                        'course_id': course.course_id,
+                        'course_name': course.course_name,
+                        'department_id': course.department_id.dept_id if course.department_id else None,
+                        'department_name': course.get_department_name(),
+                        'unit_count': unit_count,
+                        'question_count': question_count,
+                        'faculty_count': faculty_count
+                    })
                 return Response({'courses': data})
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=404)
@@ -484,30 +577,36 @@ def course_view(request, course_id=None):
 
     elif request.method == 'POST':
         try:
-            course_id = request.data.get('course_id')
-            course_name = request.data.get('course_name')
-            department_id = request.data.get('department_id')
+            data = request.data
+            print(f"Received course data: {data}")
+            
+            # Extract course_id from either course_id or course_code
+            course_id = data.get('course_id') or data.get('course_code')
+            course_name = data.get('course_name')
+            department_id = data.get('department_id') or data.get('dept_id')
+            
+            print(f"Parsed values: course_id={course_id}, course_name={course_name}, department_id={department_id}")
 
             if not course_id or not course_name:
-                return Response({
-                    'error': 'Course ID and name are required'
-                }, status=400)
-
-            if Course.objects.filter(course_id=course_id).exists():
-                return Response({'error': 'Course with this ID already exists'}, status=400)
+                print(f"Validation failed: course_id={bool(course_id)}, course_name={bool(course_name)}")
+                return Response({'error': 'Course ID and name are required'}, status=400)
 
             department = None
             if department_id:
                 try:
                     department = Department.objects.get(dept_id=department_id)
+                    print(f"Found department: {department.dept_name}")
                 except Department.DoesNotExist:
+                    print(f"Department not found with ID: {department_id}")
                     return Response({'error': 'Department not found'}, status=404)
 
+            # Create the course with the parsed values
             course = Course.objects.create(
                 course_id=course_id,
                 course_name=course_name,
                 department_id=department
             )
+            print(f"Successfully created course: {course.course_name}")
 
             return Response({
                 'message': 'Course created successfully',
@@ -515,24 +614,29 @@ def course_view(request, course_id=None):
                     'course_id': course.course_id,
                     'course_name': course.course_name,
                     'department_id': course.department_id.dept_id if course.department_id else None,
-                    'department_name': course.department_id.dept_name if course.department_id else 'Not Assigned'
+                    'department_name': course.get_department_name()
                 }
-            }, status=201)
+            })
         except Exception as e:
-            print(f"Error in course POST: {str(e)}")
+            print(f"Error creating course: {str(e)}")
             return Response({'error': str(e)}, status=400)
 
     elif request.method == 'PUT':
         try:
-            if not course_id:
-                course_id = request.data.get('course_id')
+            data = request.data
+            print(f"Received course update data: {data}")
             
+            course_id = data.get('course_id')
             if not course_id:
                 return Response({'error': 'Course ID is required'}, status=400)
-
+            
             course = Course.objects.get(course_id=course_id)
-            department_id = request.data.get('department_id')
-
+            
+            # Update course fields
+            if 'course_name' in data:
+                course.course_name = data['course_name']
+            
+            department_id = data.get('department_id') or data.get('dept_id')
             if department_id:
                 try:
                     department = Department.objects.get(dept_id=department_id)
@@ -541,10 +645,10 @@ def course_view(request, course_id=None):
                     return Response({'error': 'Department not found'}, status=404)
             else:
                 course.department_id = None
-
+            
             course.save()
-
-            # Return updated course data
+            print(f"Successfully updated course: {course.course_name}")
+            
             return Response({
                 'message': 'Course updated successfully',
                 'course': {
@@ -557,94 +661,78 @@ def course_view(request, course_id=None):
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=404)
         except Exception as e:
-            print(f"Error in course PUT: {str(e)}")
+            print(f"Error updating course: {str(e)}")
             return Response({'error': str(e)}, status=400)
 
-    def delete(self, request, course_id=None):
+    elif request.method == 'DELETE':
         try:
-            if not course_id:
-                course_id = request.query_params.get('course_id')
-            
             if not course_id:
                 return Response({'error': 'Course ID is required'}, status=400)
 
             course = Course.objects.get(course_id=course_id)
+            course_name = course.course_name  # Store name before deletion for response
             course.delete()
-            return Response({'message': f'Course {course_id} deleted successfully'})
+            
+            return Response({
+                'message': f'Course {course_name} deleted successfully',
+                'deleted_course': {
+                    'course_id': course_id,
+                    'course_name': course_name
+                }
+            })
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=404)
         except Exception as e:
-            print(f"Error in course DELETE: {str(e)}")
+            print(f"Error deleting course: {str(e)}")
             return Response({'error': str(e)}, status=400)
+
+    return Response({'error': 'Method not allowed'}, status=405)
 
 
 # Faculty-Course Mapping View
 @api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([IsAuthenticated])
-@role_required(['admin'])  # Only admin can access this endpoint
-def faculty_course_mapping_view(request):
+@role_required(['admin'])
+def faculty_course_mapping(request, faculty_id=None, course_id=None):
     if request.method == 'GET':
         try:
-            mappings = FacultyCourse.objects.select_related(
-                'faculty_id', 
-                'course_id',
-                'course_id__department_id'
-            ).all()
-            
-            data = [{
-                'faculty_id': m.faculty_id.f_id,
-                'faculty_name': m.faculty_id.name,
-                'course_id': m.course_id.course_id,
-                'course_name': m.course_id.course_name,
-                'department_name': m.course_id.get_department_name()
-            } for m in mappings]
-            
-            return Response({'mappings': data})
-        except Exception as e:
-            print(f"Error in mapping GET: {str(e)}")
-            return Response({'error': str(e)}, status=400)
-
-    elif request.method == 'POST':
-        try:
-            faculty_id = request.data.get('faculty_id')
-            course_id = request.data.get('course_id')
-
             if not faculty_id or not course_id:
-                return Response({'error': 'Both faculty_id and course_id are required'}, status=400)
+                return Response({'error': 'Both faculty ID and course ID are required'}, status=400)
 
             faculty = Faculty.objects.get(f_id=faculty_id)
             course = Course.objects.get(course_id=course_id)
 
             # Check if mapping already exists
             if FacultyCourse.objects.filter(faculty_id=faculty, course_id=course).exists():
-                return Response({'error': 'This faculty-course mapping already exists'}, status=400)
+                return Response({'error': 'Faculty is already assigned to this course'}, status=400)
 
-            mapping = FacultyCourse.objects.create(faculty_id=faculty, course_id=course)
+            # Create mapping
+            FacultyCourse.objects.create(
+                faculty_id=faculty,
+                course_id=course
+            )
+
             return Response({
-                'message': 'Faculty-course mapping created successfully',
+                'message': 'Faculty assigned to course successfully',
                 'mapping': {
-                    'faculty_id': faculty.f_id,
+                    'faculty_id': faculty_id,
                     'faculty_name': faculty.name,
-                    'course_id': course.course_id,
-                    'course_name': course.course_name,
-                    'department_name': course.get_department_name()
+                    'course_id': course_id,
+                    'course_name': course.course_name
                 }
-            }, status=201)
+            })
         except Faculty.DoesNotExist:
             return Response({'error': 'Faculty not found'}, status=404)
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=404)
         except Exception as e:
-            print(f"Error in mapping POST: {str(e)}")
+            print(f"Error in faculty-course mapping: {str(e)}")
             return Response({'error': str(e)}, status=400)
 
     elif request.method == 'DELETE':
         try:
-            faculty_id = request.data.get('faculty_id')
-            course_id = request.data.get('course_id')
-
             if not faculty_id or not course_id:
-                return Response({'error': 'Both faculty_id and course_id are required'}, status=400)
+                return Response({'error': 'Both faculty ID and course ID are required'}, status=400)
 
             mapping = FacultyCourse.objects.filter(
                 faculty_id__f_id=faculty_id,
@@ -652,13 +740,15 @@ def faculty_course_mapping_view(request):
             ).first()
 
             if not mapping:
-                return Response({'error': 'Faculty-course mapping not found'}, status=404)
+                return Response({'error': 'Mapping not found'}, status=404)
 
             mapping.delete()
-            return Response({'message': 'Faculty-course mapping deleted successfully'})
+            return Response({'message': 'Faculty removed from course successfully'})
         except Exception as e:
-            print(f"Error in mapping DELETE: {str(e)}")
+            print(f"Error removing faculty-course mapping: {str(e)}")
             return Response({'error': str(e)}, status=400)
+
+    return Response({'error': 'Method not allowed'}, status=405)
 
 
 # Unit CRUD View
@@ -1050,32 +1140,42 @@ class UserListView(APIView):
 class FilterQuestionsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request, course_id):
         try:
+
             unit_numbers = request.data.get('unit_numbers', [])
             cos = request.data.get('cos', [])
             bts = request.data.get('bts', [])
             marks = request.data.get('marks', [])
 
-            questions = Question.objects.filter(
-                unit_id__unit_id__in=unit_numbers,
-                co__in=cos,
-                bt__in=bts,
-                marks__in=marks
-            ).prefetch_related('questionmedia_set')
+            # Base query with course_id filter
+            query = Q(course_id_id=course_id)
+
+            # Add other filters only if they are provided
+            if unit_numbers:
+                query &= Q(unit_id__unit_id__in=unit_numbers)
+            if cos:
+                query &= Q(co__in=cos)
+            if bts:
+                query &= Q(bt__in=bts)
+            if marks:
+                query &= Q(marks__in=marks)
+
+            questions = Question.objects.filter(query).select_related('unit_id').prefetch_related('media')
 
             response_data = []
             for question in questions:
-                media = question.questionmedia_set.first()
+                media = question.media.first()
                 question_data = {
                     "id": question.q_id,
                     "text": question.text,
                     "marks": question.marks,
                     "co": question.co,
                     "bt": question.bt,
-                    "unit": question.unit_id.unit_id,
-                    "image_paths": media.image_paths if media else None,
-                    "equations": media.equations if media else None
+                    "unit_id": question.unit_id.unit_id if question.unit_id else None,
+                    "unit_name": question.unit_id.unit_name if question.unit_id else None,
+                    "image_paths": media.image_paths if media else [],
+                    "equations": media.equations if media else []
                 }
                 response_data.append(question_data)
 
@@ -1105,14 +1205,17 @@ def faculty_course_view(request):
                 return Response({'mappings': data})
             
             # If faculty, get only their mappings
-            faculty = Faculty.objects.get(user=request.user)
-            mappings = FacultyCourse.objects.select_related('course_id').filter(faculty_id=faculty)
-            data = [{
-                'course_id': m.course_id.course_id,
-                'course_name': m.course_id.course_name,
-                'department_name': m.course_id.get_department_name()
-            } for m in mappings]
-            return Response({'mappings': data})
+            try:
+                faculty = Faculty.objects.get(email=request.user.email)
+                mappings = FacultyCourse.objects.select_related('course_id').filter(faculty_id=faculty)
+                data = [{
+                    'course_id': m.course_id.course_id,
+                    'course_name': m.course_id.course_name,
+                    'department_name': m.course_id.get_department_name()
+                } for m in mappings]
+                return Response({'mappings': data})
+            except Faculty.DoesNotExist:
+                return Response({'mappings': [], 'message': 'No faculty profile found'})
 
         except Faculty.DoesNotExist:
             return Response({'error': 'Faculty profile not found'}, status=404)
@@ -1173,7 +1276,7 @@ def faculty_course_view(request):
             ).first()
 
             if not mapping:
-                return Response({'error': 'Faculty-course mapping not found'}, status=404)
+                return Response({'error': 'Mapping not found'}, status=404)
 
             mapping.delete()
             return Response({'message': 'Faculty-course mapping deleted successfully'})
@@ -1187,116 +1290,154 @@ def faculty_course_view(request):
 @permission_classes([IsAuthenticated])
 @role_required(['admin'])
 def faculty_view(request, f_id=None):
-    """View for managing faculty members"""
-    
-    if request.method == 'DELETE':
-        if not f_id:
-            return Response({'error': 'Faculty ID is required'}, status=400)
-        
+    if request.method == 'GET':
         try:
-            faculty = Faculty.objects.get(f_id=f_id)
-            faculty.delete()  # This will trigger the custom delete method
-            return Response({'message': 'Faculty deleted successfully'})
-        except Faculty.DoesNotExist:
-            return Response({'error': 'Faculty not found'}, status=404)
-        except Exception as e:
-            print(f"Error deleting faculty: {str(e)}")
-            return Response({'error': str(e)}, status=400)
+            # Get faculty ID from either URL parameter or query parameter
+            faculty_id = f_id or request.GET.get('f_id')
+            
+            if faculty_id:
+                faculty = Faculty.objects.get(f_id=faculty_id)
+                # Get faculty's courses with their departments
+                faculty_courses = FacultyCourse.objects.filter(faculty_id=faculty).select_related(
+                    'course_id', 
+                    'course_id__department_id'
+                )
+                
+                # Get all unique departments from courses
+                departments = set()
+                courses_data = []
+                
+                for fc in faculty_courses:
+                    course = fc.course_id
+                    if course.department_id:
+                        departments.add(course.department_id)
+                    
+                    courses_data.append({
+                        'course_id': course.course_id,
+                        'course_name': course.course_name,
+                        'department_id': course.department_id.dept_id if course.department_id else None,
+                        'department_name': course.department_id.dept_name if course.department_id else "Not Assigned"
+                    })
 
-    elif request.method == 'GET':
-        if f_id:
-            try:
-                faculty = Faculty.objects.get(f_id=f_id)
+                # Convert departments set to list for serialization
+                departments_data = [{
+                    'dept_id': dept.dept_id,
+                    'dept_name': dept.dept_name
+                } for dept in departments]
+
                 data = {
                     'f_id': faculty.f_id,
                     'name': faculty.name,
                     'email': faculty.email,
-                    'department_id': faculty.department_id.dept_id if faculty.department_id else None,
-                    'department_name': faculty.get_department_name(),
-                    'course_count': faculty.get_course_count(),
-                    'paper_count': faculty.get_paper_count()
+                    'departments': departments_data,
+                    'courses': courses_data,
+                    'course_count': len(courses_data)
                 }
                 return Response({'faculty': data})
-            except Faculty.DoesNotExist:
-                return Response({'error': 'Faculty not found'}, status=404)
-        else:
-            faculty = Faculty.objects.all()
-            data = [{
-                'f_id': f.f_id,
-                'name': f.name,
-                'email': f.email,
-                'department_id': f.department_id.dept_id if f.department_id else None,
-                'department_name': f.get_department_name(),
-                'course_count': f.get_course_count(),
-                'paper_count': f.get_paper_count()
-            } for f in faculty]
-            return Response({'faculty': data})
+            else:
+                faculty_list = Faculty.objects.all()
+                data = []
+                for faculty in faculty_list:
+                    faculty_courses = FacultyCourse.objects.filter(faculty_id=faculty).select_related(
+                        'course_id', 
+                        'course_id__department_id'
+                    )
+                    
+                    # Get all unique departments from courses
+                    departments = set()
+                    courses_data = []
+                    
+                    for fc in faculty_courses:
+                        course = fc.course_id
+                        if course.department_id:
+                            departments.add(course.department_id)
+                        
+                        courses_data.append({
+                            'course_id': course.course_id,
+                            'course_name': course.course_name,
+                            'department_id': course.department_id.dept_id if course.department_id else None,
+                            'department_name': course.department_id.dept_name if course.department_id else "Not Assigned"
+                        })
+
+                    # Convert departments set to list for serialization
+                    departments_data = [{
+                        'dept_id': dept.dept_id,
+                        'dept_name': dept.dept_name
+                    } for dept in departments]
+
+                    data.append({
+                        'f_id': faculty.f_id,
+                        'name': faculty.name,
+                        'email': faculty.email,
+                        'departments': departments_data,
+                        'courses': courses_data,
+                        'course_count': len(courses_data)
+                    })
+                return Response({'faculty': data})
+        except Faculty.DoesNotExist:
+            return Response({'error': 'Faculty not found'}, status=404)
+        except Exception as e:
+            print(f"Error in faculty GET: {str(e)}")
+            return Response({'error': str(e)}, status=400)
 
     elif request.method == 'POST':
         try:
-            # Get required fields
-            f_id = request.data.get('f_id')
-            name = request.data.get('name')
-            email = request.data.get('email')
-            password = request.data.get('password')
-            department_id = request.data.get('department_id')
+            data = request.data
             
-            # Validate required fields
-            missing_fields = []
-            if not f_id:
-                missing_fields.append('Faculty ID')
-            if not name:
-                missing_fields.append('Name')
-            if not email:
-                missing_fields.append('Email')
-            if not password:
-                missing_fields.append('Password')
-            
-            if missing_fields:
-                return Response({
-                    'error': f'Missing required fields: {", ".join(missing_fields)}'
-                }, status=400)
-
-            # Check if faculty already exists
-            if Faculty.objects.filter(f_id=f_id).exists():
-                return Response({'error': 'Faculty with this ID already exists'}, status=400)
-
-            # Check if email already exists
-            if CustomUser.objects.filter(email=email).exists():
-                return Response({'error': 'Email already exists'}, status=400)
-
-            # Create user account
+            # Generate f_id as an integer
+            latest_faculty = Faculty.objects.order_by('-f_id').first()
             try:
-                user = CustomUser.objects.create_user(
-                    username=email,
-                    email=email,
-                    password=password,
+                last_id = int(latest_faculty.f_id) if latest_faculty else 0
+                new_id = last_id + 1
+            except ValueError:
+                new_id = 1
+            
+            f_id = str(new_id)
+            
+            # Check if user exists
+            try:
+                user = CustomUser.objects.get(email=data['email'])
+                if Faculty.objects.filter(email=data['email']).exists():
+                    return Response({'error': 'Faculty profile already exists'}, status=400)
+            except CustomUser.DoesNotExist:
+                # Create new user if doesn't exist
+                password = request.data.get('password')
+                if not password:
+                    return Response({'error': 'Password is required for new users'}, status=400)
+
+                # Split the faculty name into first_name and last_name
+                full_name = data.get('name', '').strip()
+                name_parts = full_name.split(' ', 1)
+                first_name = name_parts[0]
+                last_name = name_parts[1] if len(name_parts) > 1 else ''
+
+                user = CustomUser.objects.create(
+                    username=data['email'],
+                    email=data['email'],
+                    first_name=first_name,
+                    last_name=last_name,
                     role='faculty'
                 )
-            except Exception as e:
-                return Response({'error': f'Failed to create user account: {str(e)}'}, status=400)
-            
-            # Get department if provided
+                user.set_password(password)
+                user.save()
+
+            # Get department if dept_id is provided
             department = None
-            if department_id:
+            if data.get('dept_id'):
                 try:
-                    department = Department.objects.get(dept_id=department_id)
+                    department = Department.objects.get(dept_id=data['dept_id'])
                 except Department.DoesNotExist:
-                    user.delete()  # Rollback user creation
+                    user.delete()  # Clean up user if department not found
                     return Response({'error': 'Department not found'}, status=404)
 
-            # Create faculty
-            try:
-                faculty = Faculty.objects.create(
-                    f_id=f_id,
-                    name=name,
-                    email=email,
-                    user=user,
-                    department_id=department
-                )
-            except Exception as e:
-                user.delete()  # Rollback user creation
-                return Response({'error': f'Failed to create faculty: {str(e)}'}, status=400)
+            # Create faculty profile
+            faculty = Faculty.objects.create(
+                f_id=f_id,
+                name=data.get('name', f'{user.first_name} {user.last_name}').strip(),
+                email=data['email'],
+                department_id=department,
+                user=user
+            )
 
             return Response({
                 'message': 'Faculty created successfully',
@@ -1305,118 +1446,201 @@ def faculty_view(request, f_id=None):
                     'name': faculty.name,
                     'email': faculty.email,
                     'department_id': faculty.department_id.dept_id if faculty.department_id else None,
-                    'department_name': faculty.department_id.dept_name if faculty.department_id else 'Not Assigned'
+                    'department_name': faculty.get_department_name()
                 }
-            }, status=201)
+            })
+
         except Exception as e:
-            print(f"Error in faculty POST: {str(e)}")
+            print(f"Error creating faculty: {str(e)}")
+            # Clean up user if it was created
+            if 'user' in locals():
+                user.delete()
+            return Response({'error': str(e)}, status=400)
+
+    elif request.method == 'PUT':
+        try:
+            data = request.data
+            faculty_id = data.get('faculty_id')
+            if not faculty_id:
+                return Response({'error': 'Faculty ID is required'}, status=400)
+
+            faculty = Faculty.objects.get(f_id=faculty_id)
+            
+            # Update faculty fields
+            if 'name' in data:
+                faculty.name = data['name']
+            if 'email' in data:
+                faculty.email = data['email']
+            if 'password' in data and data['password']:
+                # Update password in CustomUser
+                try:
+                    user = CustomUser.objects.get(email=faculty.email)
+                    user.set_password(data['password'])
+                    user.save()
+                except CustomUser.DoesNotExist:
+                    return Response({'error': 'User account not found'}, status=404)
+
+            faculty.save()
+
+            return Response({
+                'message': 'Faculty updated successfully',
+                'faculty': {
+                    'f_id': faculty.f_id,
+                    'name': faculty.name,
+                    'email': faculty.email
+                }
+            })
+
+        except Faculty.DoesNotExist:
+            return Response({'error': 'Faculty not found'}, status=404)
+        except Exception as e:
+            print(f"Error updating faculty: {str(e)}")
+            return Response({'error': str(e)}, status=400)
+
+    elif request.method == 'DELETE':
+        try:
+            if not f_id:
+                return Response({'error': 'Faculty ID is required'}, status=400)
+
+            faculty = Faculty.objects.get(f_id=f_id)
+            
+            # Get the associated user account
+            try:
+                user = CustomUser.objects.get(email=faculty.email)
+            except CustomUser.DoesNotExist:
+                user = None
+
+            # Store faculty info for response
+            faculty_info = {
+                'f_id': faculty.f_id,
+                'name': faculty.name,
+                'email': faculty.email
+            }
+
+            # Delete faculty (this will cascade delete faculty-course mappings)
+            faculty.delete()
+
+            # Delete associated user account if it exists
+            if user:
+                user.delete()
+
+            return Response({
+                'message': f'Faculty {faculty_info["name"]} deleted successfully',
+                'deleted_faculty': faculty_info
+            })
+
+        except Faculty.DoesNotExist:
+            return Response({'error': 'Faculty not found'}, status=404)
+        except Exception as e:
+            print(f"Error deleting faculty: {str(e)}")
             return Response({'error': str(e)}, status=400)
 
     return Response({'error': 'Method not allowed'}, status=405)
 
 @api_view(['GET', 'POST', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
-@role_required(['admin'])
+@role_required(['admin', 'faculty'])
 def question_view(request, q_id=None):
     if request.method == 'GET':
-        try:
-            if q_id:
-                question = Question.objects.select_related(
-                    'course_id',
-                    'unit_id'
-                ).get(q_id=q_id)
-                data = {
+        if q_id:
+            try:
+                question = Question.objects.get(q_id=q_id)
+                response_data = {
                     'q_id': question.q_id,
                     'text': question.text,
-                    'course_id': question.course_id.course_id,
-                    'course_name': question.course_id.course_name,
-                    'unit_id': question.unit_id.unit_id,
-                    'unit_name': question.unit_id.unit_name,
+                    'unit_id': str(question.unit_id.unit_id) if question.unit_id else None,
                     'co': question.co,
                     'bt': question.bt,
                     'marks': question.marks,
                     'difficulty_level': question.difficulty_level,
-                    'tags': question.tags
+                    'type': question.type
                 }
-                return Response({'question': data})
-            else:
-                questions = Question.objects.select_related(
-                    'course_id',
-                    'unit_id'
-                ).all()
-                data = [{
-                    'q_id': q.q_id,
-                    'text': q.text,
-                    'course_id': q.course_id.course_id,
-                    'course_name': q.course_id.course_name,
-                    'unit_id': q.unit_id.unit_id,
-                    'unit_name': q.unit_id.unit_name,
-                    'co': q.co,
-                    'bt': q.bt,
-                    'marks': q.marks,
-                    'difficulty_level': q.difficulty_level,
-                    'tags': q.tags
-                } for q in questions]
-                return Response({'questions': data})
+                return Response({'question': response_data})
+            except Question.DoesNotExist:
+                return Response({'error': 'Question not found'}, status=404)
+            except Exception as e:
+                return Response({'error': str(e)}, status=500)
+        else:
+            try:
+                questions = Question.objects.all()
+                questions_data = []
+                
+                for q in questions:
+                    question_data = {
+                        'q_id': q.q_id,
+                        'text': q.text,
+                        'unit_id': str(q.unit_id.unit_id) if q.unit_id else None,
+                        'co': q.co,
+                        'bt': q.bt,
+                        'marks': q.marks,
+                        'difficulty_level': q.difficulty_level,
+                        'type': q.type
+                    }
+                    questions_data.append(question_data)
+                
+                return Response({'questions': questions_data})
+            except Exception as e:
+                return Response({'error': str(e)}, status=500)
+
+    elif request.method == 'PUT':
+        if not q_id:
+            return Response({'error': 'Question ID is required'}, status=400)
+        
+        try:
+            question = Question.objects.select_related('course_id').get(q_id=q_id)
+            data = request.data
+            
+            # Update fields if they exist in the request data
+            if 'text' in data:
+                question.text = data['text']
+            if 'unit_id' in data:
+                try:
+                    # Get or create the Unit instance
+                    unit_id = int(data['unit_id'])
+                    unit, created = Unit.objects.get_or_create(
+                        unit_id=unit_id,
+                        course_id=question.course_id,
+                        defaults={'unit_name': f'Unit {unit_id}'}
+                    )
+                    question.unit_id = unit
+                except (ValueError, TypeError):
+                    return Response({
+                        'error': 'Invalid unit_id format'
+                    }, status=400)
+                except Unit.DoesNotExist:
+                    return Response({
+                        'error': f'Unit with ID {data["unit_id"]} not found'
+                    }, status=400)
+            if 'co' in data:
+                question.co = data['co']
+            if 'bt' in data:
+                question.bt = data['bt']
+            if 'marks' in data:
+                question.marks = data['marks']
+            if 'difficulty_level' in data:
+                question.difficulty_level = data['difficulty_level']
+            if 'type' in data:
+                question.type = data['type']
+            
+            question.save()
+            return Response({'message': 'Question updated successfully'})
         except Question.DoesNotExist:
             return Response({'error': 'Question not found'}, status=404)
         except Exception as e:
-            print(f"Error in question GET: {str(e)}")
-            return Response({'error': str(e)}, status=400)
+            return Response({'error': str(e)}, status=500)
 
-    elif request.method == 'POST':
+    elif request.method == 'DELETE':
+        if not q_id:
+            return Response({'error': 'Question ID is required'}, status=400)
+        
         try:
-            # Get required fields
-            text = request.data.get('text')
-            course_id = request.data.get('course_id')
-            unit_id = request.data.get('unit_id')
-            co = request.data.get('co')
-            bt = request.data.get('bt')
-            marks = request.data.get('marks')
-            
-            # Validate required fields
-            if not all([text, course_id, unit_id, co, bt, marks]):
-                return Response({
-                    'error': 'Missing required fields'
-                }, status=400)
-
-            # Get course and unit
-            course = Course.objects.get(course_id=course_id)
-            unit = Unit.objects.get(unit_id=unit_id, course_id=course)
-
-            # Create question
-            question = Question.objects.create(
-                text=text,
-                course_id=course,
-                unit_id=unit,
-                co=co,
-                bt=bt,
-                marks=marks,
-                difficulty_level=request.data.get('difficulty_level', 'medium'),
-                tags=request.data.get('tags', [])
-            )
-
-            return Response({
-                'message': 'Question created successfully',
-                'question': {
-                    'q_id': question.q_id,
-                    'text': question.text,
-                    'course_id': course.course_id,
-                    'course_name': course.course_name,
-                    'unit_id': unit.unit_id,
-                    'unit_name': unit.unit_name,
-                    'co': question.co,
-                    'bt': question.bt,
-                    'marks': question.marks,
-                    'difficulty_level': question.difficulty_level,
-                    'tags': question.tags
-                }
-            }, status=201)
-        except (Course.DoesNotExist, Unit.DoesNotExist):
-            return Response({'error': 'Course or Unit not found'}, status=404)
+            question = Question.objects.get(q_id=q_id)
+            question.delete()
+            return Response({'message': 'Question deleted successfully'})
+        except Question.DoesNotExist:
+            return Response({'error': 'Question not found'}, status=404)
         except Exception as e:
-            print(f"Error in question POST: {str(e)}")
-            return Response({'error': str(e)}, status=400)
+            return Response({'error': str(e)}, status=500)
 
     return Response({'error': 'Method not allowed'}, status=405)
 
@@ -1443,3 +1667,203 @@ def question_stats(request):
         print(f"Error in question stats: {str(e)}")
         return Response({'error': str(e)}, status=400)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@role_required(['admin', 'faculty'])
+def course_questions_view(request, course_id):
+    try:
+        # Verify course exists
+        course = Course.objects.get(course_id=course_id)
+
+        # Get all questions for this course
+        questions = Question.objects.select_related(
+            'course_id',
+            'unit_id'
+        ).filter(course_id=course)
+
+        # Format the response data
+        data = [{
+            'q_id': q.q_id,
+            'text': q.text,
+            'course_id': q.course_id.course_id,
+            'course_name': q.course_id.course_name,
+            'unit_id': q.unit_id.unit_id,
+            'unit_name': q.unit_id.unit_name,
+            'co': q.co,
+            'bt': q.bt,
+            'marks': q.marks,
+            'difficulty_level': q.difficulty_level,
+            'type': q.type,
+            'has_image': bool(q.image)
+        } for q in questions]
+
+        # Get additional course info
+        course_info = {
+            'course_id': course.course_id,
+            'course_name': course.course_name,
+            'unit_count': course.get_unit_count(),
+            'question_count': len(data)
+        }
+
+        return Response({
+            'course': course_info,
+            'questions': data
+        })
+
+    except Course.DoesNotExist:
+        return Response({'error': 'Course not found'}, status=404)
+    except Exception as e:
+        print(f"Error fetching course questions: {str(e)}")
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def course_questions_view(request, course_id):
+    try:
+        # Get questions for the specific course
+        questions = Question.objects.select_related(
+            'course_id',
+            'unit_id'
+        ).filter(course_id=course_id)
+
+        # Format the response data
+        questions_data = [{
+            'q_id': q.q_id,
+            'text': q.text,
+            'course_id': q.course_id.course_id,
+            'course_name': q.course_id.course_name,
+            'unit_id': q.unit_id.unit_id if q.unit_id else None,
+            'unit_name': q.unit_id.unit_name if q.unit_id else None,
+            'co': q.co,
+            'bt': q.bt,
+            'marks': q.marks,
+            'difficulty_level': q.difficulty_level,
+            'type': q.type,
+            'has_image': bool(q.image),
+            'has_equations': hasattr(q, 'questionmedia') and bool(q.questionmedia.equations)
+        } for q in questions]
+
+        return Response({
+            'questions': questions_data
+        })
+
+    except Course.DoesNotExist:
+        return Response({'error': f'Course with ID {course_id} not found'}, status=404)
+    except Exception as e:
+        print(f"Error fetching course questions: {str(e)}")
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['GET', 'POST', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+@role_required(['admin', 'faculty'])
+def question_view(request, q_id=None):
+    if request.method == 'GET':
+        if q_id:
+            try:
+                question = Question.objects.get(q_id=q_id)
+                response_data = {
+                    'q_id': question.q_id,
+                    'text': question.text,
+                    'unit_id': str(question.unit_id.unit_id) if question.unit_id else None,
+                    'co': question.co,
+                    'bt': question.bt,
+                    'marks': question.marks,
+                    'difficulty_level': question.difficulty_level,
+                    'type': question.type
+                }
+                return Response({'question': response_data})
+            except Question.DoesNotExist:
+                return Response({'error': 'Question not found'}, status=404)
+        else:
+            questions = Question.objects.all()
+            return Response({
+                'questions': [{
+                    'q_id': q.q_id,
+                    'text': q.text,
+                    'unit_id': str(q.unit_id.unit_id) if q.unit_id else None,
+                    'co': q.co,
+                    'bt': q.bt,
+                    'marks': q.marks,
+                    'difficulty_level': q.difficulty_level,
+                    'type': q.type
+                } for q in questions]
+            })
+
+    elif request.method == 'POST':
+        data = request.data
+        course_id = data.get('course_id')
+        if not course_id:
+            return Response({'error': 'Course ID is required'}, status=400)
+
+        # Get or create default unit if unit_id is not provided
+        unit_id = data.get('unit_id')
+        if not unit_id:
+            try:
+                course = Course.objects.get(course_id=course_id)
+                # Try to get or create a unit with both course_id and unit_id
+                unit, created = Unit.objects.get_or_create(
+                    course_id=course,
+                    unit_id=1,  # Use unit_id in the filter
+                    defaults={
+                        'unit_name': 'Unit 1'
+                    }
+                )
+                unit_id = unit.id
+            except Course.DoesNotExist:
+                return Response({'error': 'Course not found'}, status=404)
+
+        question = Question.objects.create(
+            text=data['text'],
+            unit_id_id=unit_id,  # Use unit_id_id for ForeignKey
+            course_id_id=course_id,  # Set the course_id
+            co=data.get('co', 'CO1'),
+            bt=data.get('bt', 'BT1'),
+            marks=data.get('marks', 2),
+            difficulty_level=data.get('difficulty_level', 'Medium'),
+            type=data.get('type', 'Test')
+        )
+        return Response({
+            'message': 'Question created successfully',
+            'q_id': question.q_id
+        }, status=201)
+
+    elif request.method == 'PUT':
+        if not q_id:
+            return Response({'error': 'Question ID is required'}, status=400)
+        
+        try:
+            question = Question.objects.select_related('course_id').get(q_id=q_id)
+            data = request.data
+            
+            question.text = data.get('text', question.text)
+            # Handle unit_id properly by getting the Unit instance
+            unit_id = data.get('unit_id')
+            if unit_id:
+                try:
+                    unit = Unit.objects.get(id=unit_id)
+                    question.unit = unit
+                except Unit.DoesNotExist:
+                    return Response({'error': f'Unit with id {unit_id} not found'}, status=400)
+            question.co = data.get('co', question.co)
+            question.bt = data.get('bt', question.bt)
+            question.marks = data.get('marks', question.marks)
+            question.difficulty_level = data.get('difficulty_level', question.difficulty_level)
+            question.type = data.get('type', question.type)
+            
+            question.save()
+            return Response({'message': 'Question updated successfully'})
+        except Question.DoesNotExist:
+            return Response({'error': 'Question not found'}, status=404)
+
+    elif request.method == 'DELETE':
+        if not q_id:
+            return Response({'error': 'Question ID is required'}, status=400)
+        
+        try:
+            question = Question.objects.get(q_id=q_id)
+            question.delete()
+            return Response({'message': 'Question deleted successfully'})
+        except Question.DoesNotExist:
+            return Response({'error': 'Question not found'}, status=404)
+
+    return Response({'error': 'Method not allowed'}, status=405)

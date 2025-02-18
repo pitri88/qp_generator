@@ -14,6 +14,8 @@ export default function QuestionForm() {
     bt: '',
     marks: '',
     course_id: '',
+    difficulty_level: 'Medium',
+    type: 'Test',
     image: null
   });
   const [courses, setCourses] = useState([]);
@@ -38,10 +40,9 @@ export default function QuestionForm() {
 
   const fetchQuestion = async () => {
     try {
-      const response = await api.get('/question/', {
-        params: { question_id: id }
-      });
-      const question = response.data.questions.find(q => q.question_id === id);
+      setLoading(true);
+      const response = await api.get(`/question/${id}/`);
+      const question = response.data.question;
       if (question) {
         setFormData({
           text: question.text,
@@ -50,11 +51,16 @@ export default function QuestionForm() {
           bt: question.bt,
           marks: question.marks,
           course_id: question.course_id,
+          difficulty_level: question.difficulty_level || 'Medium',
+          type: question.type || 'Test',
           image: null
         });
       }
     } catch (error) {
       setError('Failed to fetch question details');
+      console.error('Error fetching question:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -71,26 +77,27 @@ export default function QuestionForm() {
     });
 
     if (id) {
-      formDataToSend.append('question_id', id);
+      formDataToSend.append('q_id', id);
     }
 
     try {
-      if (id) {
-        await api.put('/question/', formDataToSend, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-      } else {
-        await api.post('/question/', formDataToSend, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-      }
-      navigate('/admin-dashboard');
+      const response = id
+        ? await api.put(`/question/${id}/`, formDataToSend, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          })
+        : await api.post('/question/', formDataToSend, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          });
+
+      console.log(`Question ${id ? 'updated' : 'created'} successfully:`, response.data);
+      navigate('/admin/questions');
     } catch (error) {
-      setError(error.response?.data?.error || 'Failed to save question');
+      setError(error.response?.data?.error || `Failed to ${id ? 'update' : 'create'} question`);
+      console.error(`Error ${id ? 'updating' : 'creating'} question:`, error);
     } finally {
       setLoading(false);
     }
@@ -202,6 +209,35 @@ export default function QuestionForm() {
               required
               min="1"
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="difficulty_level">Difficulty Level</label>
+            <select
+              id="difficulty_level"
+              name="difficulty_level"
+              value={formData.difficulty_level}
+              onChange={handleChange}
+              required
+            >
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="type">Type</label>
+            <select
+              id="type"
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              required
+            >
+              <option value="Test">Test</option>
+              <option value="Quiz">Quiz</option>
+            </select>
           </div>
 
           <div className="form-group">

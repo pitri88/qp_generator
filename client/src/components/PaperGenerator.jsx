@@ -1,21 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { api } from '../utils/api';
 import QuestionFilter from './QuestionFilter';
 import '../styles/paper_generator.css';
 
 export default function PaperGenerator() {
+    const { courseId } = useParams();
+    const [questions, setQuestions] = useState([]);
     const [filteredQuestions, setFilteredQuestions] = useState([]);
     const [selectedQuestions, setSelectedQuestions] = useState([]);
+    const [courseInfo, setCourseInfo] = useState(null);
     const [paperMetadata, setPaperMetadata] = useState({
         course_code: '',
         course_title: '',
-        date: '',
+        date: new Date().toISOString().split('T')[0],
         max_marks: '',
         duration: '',
         semester: '',
         is_improvement_cie: false
     });
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        fetchQuestions();
+    }, [courseId]);
+
+    useEffect(() => {
+        if (courseInfo) {
+            setPaperMetadata(prev => ({
+                ...prev,
+                course_code: courseInfo.course_id,
+                course_title: courseInfo.course_name
+            }));
+        }
+    }, [courseInfo]);
+
+    const fetchQuestions = async () => {
+        setLoading(true);
+        try {
+            const response = await api.get(`/course/${courseId}/questions/`);
+            if (response.data && response.data.questions) {
+                setQuestions(response.data.questions);
+                setFilteredQuestions(response.data.questions);
+                setCourseInfo(response.data.course);
+            }
+        } catch (err) {
+            console.error('Error fetching questions:', err);
+            setError('Failed to fetch questions');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleMetadataChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -27,11 +63,11 @@ export default function PaperGenerator() {
 
     const handleQuestionSelect = (question, part) => {
         setSelectedQuestions(prev => {
-            const isAlreadySelected = prev.some(q => q.question_id === question.id);
+            const isAlreadySelected = prev.some(q => q.question_id === question.q_id);
             if (isAlreadySelected) {
-                return prev.filter(q => q.question_id !== question.id);
+                return prev.filter(q => q.question_id !== question.q_id);
             }
-            return [...prev, { question_id: question.id, part }];
+            return [...prev, { question_id: question.q_id, part, marks: question.marks }];
         });
     };
 
@@ -66,13 +102,21 @@ export default function PaperGenerator() {
         }
     };
 
+    if (loading) return <div className="loading">Loading questions...</div>;
+    if (error) return <div className="error">{error}</div>;
+
+    const totalMarks = selectedQuestions.reduce((sum, q) => sum + q.marks, 0);
+
     return (
         <div className="paper-generator">
             <h1>Question Paper Generator</h1>
             
             {/* Question Filter Section */}
             <section className="filter-section">
-                <QuestionFilter onQuestionsFiltered={setFilteredQuestions} />
+                <QuestionFilter 
+                    questions={questions}
+                    onQuestionsFiltered={setFilteredQuestions} 
+                />
             </section>
 
             {/* Question Selection Section */}
@@ -80,24 +124,24 @@ export default function PaperGenerator() {
                 <h2>Select Questions</h2>
                 <div className="questions-grid">
                     {filteredQuestions.map(question => (
-                        <div key={question.id} className="question-card">
+                        <div key={question.q_id} className="question-card">
                             <p>{question.text}</p>
                             <div className="question-details">
                                 <span>Marks: {question.marks}</span>
                                 <span>CO: {question.co}</span>
                                 <span>BT: {question.bt}</span>
-                                <span>Unit: {question.unit}</span>
+                                <span>Unit: {question.unit_id}</span>
                             </div>
                             <div className="question-actions">
                                 <button 
                                     onClick={() => handleQuestionSelect(question, 'A')}
-                                    className={selectedQuestions.some(q => q.question_id === question.id && q.part === 'A') ? 'selected' : ''}
+                                    className={selectedQuestions.some(q => q.question_id === question.q_id && q.part === 'A') ? 'selected' : ''}
                                 >
                                     Part A
                                 </button>
                                 <button 
                                     onClick={() => handleQuestionSelect(question, 'B')}
-                                    className={selectedQuestions.some(q => q.question_id === question.id && q.part === 'B') ? 'selected' : ''}
+                                    className={selectedQuestions.some(q => q.question_id === question.q_id && q.part === 'B') ? 'selected' : ''}
                                 >
                                     Part B
                                 </button>
@@ -110,6 +154,11 @@ export default function PaperGenerator() {
             {/* Paper Metadata Section */}
             <section className="metadata-section">
                 <h2>Paper Details</h2>
+                <div className="selected-summary">
+                    Selected Questions: {selectedQuestions.length}
+                    <br />
+                    Total Marks: {totalMarks}
+                </div>
                 <form onSubmit={handleGeneratePaper}>
                     <div className="form-group">
                         <label>Course Code:</label>

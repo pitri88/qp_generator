@@ -19,10 +19,11 @@ export default function AdminQuestionList() {
   const fetchQuestions = async () => {
     try {
       const response = await api.get('/question/');
-      setQuestions(response.data.questions);
-      setLoading(false);
+      setQuestions(response.data.questions || []);
     } catch (err) {
       setError('Failed to load questions');
+      console.error('Error fetching questions:', err);
+    } finally {
       setLoading(false);
     }
   };
@@ -38,24 +39,22 @@ export default function AdminQuestionList() {
     }
   };
 
-  const getDifficultyColor = (level) => {
-    switch (level.toLowerCase()) {
-      case 'easy': return theme.colors.success.light;
-      case 'medium': return theme.colors.warning.main;
-      case 'hard': return theme.colors.error.light;
-      default: return theme.colors.primary.light;
-    }
-  };
-
-  if (loading) return <div className="loading-screen"><div className="loading-spinner" /></div>;
-  if (error) return <div className="error-screen">{error}</div>;
+  if (loading) return <div className="loading">Loading questions...</div>;
+  if (error) return <div className="error">{error}</div>;
 
   return (
-    <>
-      <Header name="Questions" logo={Logo} />
-      <div className="container">
-        <div className="header-section">
-          <h1>Manage Questions</h1>
+    <div className="question-list-page">
+      <Header name="Question Bank" logo={Logo} />
+      
+      <div className="content">
+        <div className="top-bar">
+          <div className="stats">
+            <div className="stat-item">
+              <span className="stat-value">{questions.length}</span>
+              <span className="stat-label">Total Questions</span>
+            </div>
+            {/* Add more stats as needed */}
+          </div>
           <Button 
             onClick={() => navigate('/admin/questions/add')}
             variant="primary"
@@ -64,63 +63,43 @@ export default function AdminQuestionList() {
           </Button>
         </div>
 
-        <div className="card-grid">
+        <div className="questions-grid">
           {questions.map((question) => (
             <div key={question.q_id} className="question-card">
               <div className="card-header">
-                <span className="question-icon">❓</span>
-                <div className="question-meta">
-                  <span className="course-unit">
-                    {question.course_name} - Unit {question.unit_id}
-                  </span>
-                  <span 
-                    className="difficulty-badge"
-                    style={{ background: getDifficultyColor(question.difficulty_level) }}
-                  >
+                <div className="course-info">
+                  <span className="course-name">{question.course_name}</span>
+                  <span className="unit">Unit {question.unit_id}</span>
+                </div>
+                <div className="marks">{question.marks} marks</div>
+              </div>
+
+              <div className="question-content">
+                <p className="question-text">{question.text}</p>
+                
+                <div className="tags">
+                  <span className="tag co">CO {question.co}</span>
+                  <span className="tag bt">BT {question.bt}</span>
+                  <span className={`tag difficulty ${question.difficulty_level.toLowerCase()}`}>
                     {question.difficulty_level}
                   </span>
                 </div>
               </div>
-              <div className="card-content">
-                <div className="question-text">
-                  {question.text}
-                </div>
-                <div className="question-details">
-                  <div className="detail-item">
-                    <span className="label">CO</span>
-                    <span className="value">{question.co}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="label">BT Level</span>
-                    <span className="value">{question.bt}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="label">Marks</span>
-                    <span className="value">{question.marks}</span>
-                  </div>
-                </div>
-                {question.tags && question.tags.length > 0 && (
-                  <div className="tags-container">
-                    {question.tags.map((tag, index) => (
-                      <span key={index} className="tag">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+
               <div className="card-actions">
                 <button 
-                  className="edit-btn"
-                  onClick={() => navigate(`/admin/questions/${question.q_id}/edit`)}
+                  className="action-btn edit"
+                  onClick={() => navigate(`/admin/questions/${question.q_id}`)}
+                  aria-label="Edit question"
                 >
-                  Edit
+                  <span role="img" aria-hidden="true">✏️</span>
                 </button>
                 <button 
-                  className="delete-btn"
+                  className="action-btn delete"
                   onClick={() => handleDelete(question.q_id)}
+                  aria-label="Delete question"
                 >
-                  Delete
+                  <span role="img" aria-hidden="true">🗑️</span>
                 </button>
               </div>
             </div>
@@ -129,198 +108,171 @@ export default function AdminQuestionList() {
       </div>
 
       <style jsx>{`
-        .container {
+        .question-list-page {
           padding: 2rem;
-          max-width: 1400px;
-          margin: 0 auto;
-          min-height: calc(100vh - 64px);
-          background: ${theme.colors.background.light};
         }
 
-        .header-section {
+        .content {
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+
+        .top-bar {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 2rem;
-          background: white;
-          padding: 1.5rem 2rem;
-          border-radius: ${theme.borderRadius.lg};
-          box-shadow: ${theme.shadows.md};
         }
 
-        .header-section h1 {
-          color: ${theme.colors.primary.main};
-          margin: 0;
-          font-size: 2rem;
-        }
-
-        .card-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+        .stats {
+          display: flex;
           gap: 2rem;
+        }
+
+        .stat-item {
+          text-align: center;
+        }
+
+        .stat-value {
+          display: block;
+          font-size: 2rem;
+          font-weight: bold;
+          color: ${theme.colors.primary.main};
+        }
+
+        .stat-label {
+          color: ${theme.colors.text.secondary};
+        }
+
+        .questions-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 1.5rem;
         }
 
         .question-card {
           background: white;
           border-radius: ${theme.borderRadius.lg};
-          overflow: hidden;
           box-shadow: ${theme.shadows.md};
-          transition: all 0.3s ease;
-        }
-
-        .question-card:hover {
-          transform: translateY(-5px);
-          box-shadow: ${theme.shadows.lg};
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
         }
 
         .card-header {
-          background: ${theme.colors.error.main};
-          color: white;
-          padding: 1.5rem;
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-        }
-
-        .question-icon {
-          font-size: 2rem;
-        }
-
-        .question-meta {
-          flex: 1;
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          align-items: flex-start;
         }
 
-        .course-unit {
+        .course-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .course-name {
           font-weight: 600;
-          font-size: 1.1rem;
+          color: ${theme.colors.text.primary};
         }
 
-        .difficulty-badge {
+        .unit {
+          font-size: 0.875rem;
+          color: ${theme.colors.text.secondary};
+        }
+
+        .marks {
+          background: ${theme.colors.primary.light};
+          color: ${theme.colors.primary.main};
           padding: 0.25rem 0.75rem;
           border-radius: ${theme.borderRadius.full};
-          font-size: 0.875rem;
           font-weight: 500;
         }
 
-        .card-content {
-          padding: 1.5rem;
+        .question-content {
+          flex: 1;
         }
 
         .question-text {
-          font-size: 1.1rem;
+          margin-bottom: 1rem;
           color: ${theme.colors.text.primary};
-          margin-bottom: 1.5rem;
           line-height: 1.5;
         }
 
-        .question-details {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 1rem;
-          margin-bottom: 1rem;
-          padding: 1rem;
-          background: ${theme.colors.background.light};
-          border-radius: ${theme.borderRadius.md};
-        }
-
-        .detail-item {
-          text-align: center;
-        }
-
-        .tags-container {
+        .tags {
           display: flex;
-          flex-wrap: wrap;
           gap: 0.5rem;
-          margin-top: 1rem;
+          flex-wrap: wrap;
         }
 
         .tag {
-          background: ${theme.colors.primary.light};
-          color: white;
           padding: 0.25rem 0.75rem;
           border-radius: ${theme.borderRadius.full};
           font-size: 0.875rem;
+          font-weight: 500;
         }
 
-        .label {
-          display: block;
-          color: ${theme.colors.text.secondary};
-          font-size: 0.875rem;
-          margin-bottom: 0.25rem;
+        .tag.co {
+          background: ${theme.colors.info.light};
+          color: ${theme.colors.info.main};
         }
 
-        .value {
-          font-size: 1.1rem;
-          font-weight: 600;
-          color: ${theme.colors.text.primary};
+        .tag.bt {
+          background: ${theme.colors.warning.light};
+          color: ${theme.colors.warning.main};
+        }
+
+        .tag.difficulty {
+          background: ${theme.colors.success.light};
+          color: ${theme.colors.success.main};
+        }
+
+        .tag.difficulty.hard {
+          background: ${theme.colors.error.light};
+          color: ${theme.colors.error.main};
         }
 
         .card-actions {
-          padding: 1rem;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          border-top: 1px solid ${theme.colors.border};
-        }
-
-        .edit-btn, .delete-btn {
-          padding: 0.75rem;
-          border: none;
-          border-radius: ${theme.borderRadius.md};
-          cursor: pointer;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-
-        .edit-btn {
-          background: ${theme.colors.error.light};
-          color: white;
-        }
-
-        .edit-btn:hover {
-          background: ${theme.colors.error.main};
-        }
-
-        .delete-btn {
-          background: ${theme.colors.error.light};
-          color: white;
-        }
-
-        .delete-btn:hover {
-          background: ${theme.colors.error.main};
-        }
-
-        .loading-screen, .error-screen {
           display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: calc(100vh - 64px);
-          font-size: 1.2rem;
+          gap: 1rem;
+          margin-top: auto;
         }
 
-        .loading-spinner {
-          width: 50px;
-          height: 50px;
-          border: 5px solid ${theme.colors.background.default};
-          border-top: 5px solid ${theme.colors.error.main};
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
+        .action-btn {
+          background: none;
+          border: none;
+          padding: 0.5rem;
+          cursor: pointer;
+          border-radius: ${theme.borderRadius.md};
+          transition: background-color 0.2s;
+          font-size: 1.25rem;
         }
 
-        .error-screen {
+        .action-btn:hover {
+          background: ${theme.colors.gray[100]};
+        }
+
+        .action-btn.edit:hover {
+          color: ${theme.colors.primary.main};
+        }
+
+        .action-btn.delete:hover {
+          color: ${theme.colors.error.main};
+        }
+
+        .loading {
+          text-align: center;
+          padding: 2rem;
+          color: ${theme.colors.text.secondary};
+        }
+
+        .error {
           color: ${theme.colors.error.main};
           text-align: center;
           padding: 2rem;
         }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
       `}</style>
-    </>
+    </div>
   );
 } 

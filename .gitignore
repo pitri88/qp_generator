@@ -1,33 +1,54 @@
-# Python
+# Python/Django
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Django
-*.log
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+*.mo
 *.pot
-*.pyc
-__pycache__/
+*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-media
-
-# Migrations (if you want to ignore them)
-**/migrations/*.py
-!**/migrations/__init__.py
-
-# Environment
+instance/
+.webassets-cache
 .env
 .venv
 env/
 venv/
 ENV/
+env.bak/
+venv.bak/
 myenv/
-
-# IDE
-.idea/
-.vscode/
 
 # React/Node
 node_modules/
@@ -41,7 +62,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
 # Media/Static files
+media/
 static/
 question_images/
 
@@ -52,3 +81,7 @@ question_images/
 # Logs
 logs/
 *.log
+
+# Generated papers and uploads
+server/qp_backend/generated_papers/
+server/qp_backend/images/

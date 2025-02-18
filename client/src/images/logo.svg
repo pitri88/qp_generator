@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="240" fill="#1976D2"/>
+  
+  <!-- Book Shape -->
+  <path d="M156 156C156 145.507 164.507 137 175 137H337C347.493 137 356 145.507 356 156V356C356 366.493 347.493 375 337 375H175C164.507 375 156 366.493 156 356V156Z" fill="white"/>
+  
+  <!-- Pages -->
+  <rect x="176" y="167" width="160" height="20" rx="5" fill="#90CAF9"/>
+  <rect x="176" y="207" width="160" height="20" rx="5" fill="#90CAF9"/>
+  <rect x="176" y="247" width="160" height="20" rx="5" fill="#90CAF9"/>
+  <rect x="176" y="287" width="160" height="20" rx="5" fill="#90CAF9"/>
+  <rect x="176" y="327" width="160" height="20" rx="5" fill="#90CAF9"/>
+  
+  <!-- QP Text -->
+  <text x="256" y="420" font-family="Arial" font-size="48" font-weight="bold" fill="white" text-anchor="middle">QP</text>
+</svg>

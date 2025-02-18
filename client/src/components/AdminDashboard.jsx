@@ -2,16 +2,17 @@ import React, { useState, useEffect } from "react";
 import { api } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 import Header from './Header';
-import Logo from '../images/profile.png';
+
 import { theme } from '../styles/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     departments: 0,
     courses: 0,
-    faculty: 0,
-    questions: 0
+    faculty: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,8 +27,7 @@ export default function AdminDashboard() {
       setStats({
         departments: response.data.stats.departments,
         courses: response.data.stats.courses,
-        faculty: response.data.stats.faculty,
-        questions: response.data.stats.questions
+        faculty: response.data.stats.faculty
       });
       setLoading(false);
     } catch (error) {
@@ -56,7 +56,7 @@ export default function AdminDashboard() {
         { label: "View All", onClick: () => navigate("/admin/courses") },
         { label: "Add New", onClick: () => navigate("/admin/courses/add") }
       ],
-      color: theme.colors.secondary.main
+      color: theme.colors.warning.main
     },
     {
       title: "Faculty",
@@ -67,16 +67,6 @@ export default function AdminDashboard() {
         { label: "Add New", onClick: () => navigate("/admin/faculty/add") }
       ],
       color: theme.colors.success.main
-    },
-    {
-      title: "Questions",
-      count: stats.questions,
-      icon: "❓",
-      actions: [
-        { label: "View All", onClick: () => navigate("/admin/questions") },
-        { label: "Add New", onClick: () => navigate("/admin/questions/add") }
-      ],
-      color: theme.colors.error.main
     }
   ];
 
@@ -104,87 +94,55 @@ export default function AdminDashboard() {
     }
   ];
 
-  if (loading) return <div className="loading-screen"><div className="loading-spinner" /></div>;
-  if (error) return <div className="error-screen">{error}</div>;
+  if (loading) return <div>Loading dashboard...</div>;
+  if (error) return <div>Error: {error}</div>;
     
     return (
     <>
-      <Header name="Admin" page="Dashboard" logo={Logo} />
-      <div className="admin-dashboard">
-        <div className="welcome-section">
-          <h1>Welcome to Admin Dashboard</h1>
-          <p>Manage your institution's academic resources and faculty</p>
-        </div>
-
+      <Header page="Admin Dashboard" />
+      
+      <div className="dashboard-container">
         <div className="stats-grid">
-          {sections.map((section) => (
-            <div className="stat-card" key={section.title}>
-              <div className="stat-header" style={{ background: section.color }}>
+          {sections.map((section, index) => (
+            <div key={index} className="stat-card" style={{ borderColor: section.color, '--card-color': section.color }}>
+              <div className="stat-header">
                 <span className="stat-icon">{section.icon}</span>
                 <h3>{section.title}</h3>
-                <span className="stat-count">{section.count}</span>
-              </div>
-              <div className="stat-actions">
-                {section.actions.map((action) => (
-                    <button 
-                    key={action.label}
-                    onClick={action.onClick}
-                    className="action-button"
-                  >
-                    {action.label}
-                      </button>
-                ))}
           </div>
-            </div>
+              <div className="stat-count">{section.count}</div>
+              <div className="stat-actions">
+                {section.actions.map((action, idx) => (
+                  <button key={idx} onClick={action.onClick}>
+                    {action.label}
+          </button>
+                ))}
+        </div>
+      </div>
           ))}
         </div>
 
-        <div className="quick-actions">
-          <h2>Quick Actions</h2>
-          <div className="action-grid">
-            {quickActions.map((action) => (
-              <div 
-                key={action.title}
-                className="quick-action-card"
-                onClick={() => navigate(action.path)}
-                style={{ background: action.color }}
-              >
-                <span className="action-icon">{action.icon}</span>
-                <h3>{action.title}</h3>
-                <p>{action.description}</p>
-          </div>
-            ))}
-          </div>
+        <h2 className="section-title">Quick Actions</h2>
+        <div className="quick-actions-grid">
+          {quickActions.map((action, index) => (
+            <div
+              key={index}
+              className="quick-action-card"
+              style={{ backgroundColor: action.color }}
+              onClick={() => navigate(action.path)}
+            >
+              <span className="action-icon">{action.icon}</span>
+              <h3 style={{ color: 'white' }}>{action.title}</h3>
+              <p style={{ color: 'rgba(255, 255, 255, 0.9)' }}>{action.description}</p>
+            </div>
+          ))}
         </div>
       </div>
 
       <style jsx>{`
-        .admin-dashboard {
+        .dashboard-container {
           padding: 2rem;
-          max-width: 1400px;
+          max-width: 1200px;
           margin: 0 auto;
-          background: ${theme.colors.background.light};
-          min-height: calc(100vh - 64px);
-        }
-
-        .welcome-section {
-          text-align: center;
-          margin-bottom: 3rem;
-          padding: 2rem;
-          background: white;
-          border-radius: ${theme.borderRadius.lg};
-          box-shadow: ${theme.shadows.md};
-        }
-
-        .welcome-section h1 {
-          color: ${theme.colors.primary.main};
-          margin-bottom: 0.5rem;
-          font-size: 2.5rem;
-        }
-
-        .welcome-section p {
-          color: ${theme.colors.text.secondary};
-          font-size: 1.1rem;
         }
 
         .stats-grid {
@@ -196,143 +154,104 @@ export default function AdminDashboard() {
 
         .stat-card {
           background: white;
+          padding: 1.5rem;
           border-radius: ${theme.borderRadius.lg};
-          overflow: hidden;
           box-shadow: ${theme.shadows.md};
-          transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-          transform: translateY(-5px);
-          box-shadow: ${theme.shadows.lg};
+          border-top: 4px solid;
+          --card-color: ${theme.colors.primary.main};
         }
 
         .stat-header {
-          padding: 2rem;
-          color: white;
-          text-align: center;
-          position: relative;
+          color: var(--card-color);
+        }
+
+        .stat-header {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          margin-bottom: 1rem;
         }
 
         .stat-icon {
-          font-size: 2.5rem;
-          display: block;
-          margin-bottom: 1rem;
+          font-size: 1.5rem;
         }
 
         .stat-header h3 {
           margin: 0;
-          font-size: 1.5rem;
+          color: inherit;
           font-weight: 600;
         }
 
         .stat-count {
-          font-size: 3rem;
-          font-weight: 700;
-          display: block;
-          margin-top: 1rem;
+          font-size: 2.5rem;
+          font-weight: 600;
+          color: var(--card-color);
+          margin: 1rem 0;
         }
 
         .stat-actions {
-          padding: 1.5rem;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 1rem;
+          gap: 0.5rem;
         }
 
-        .action-button {
-          padding: 0.75rem;
+        .stat-card button {
+          padding: 0.5rem;
           border: none;
           border-radius: ${theme.borderRadius.md};
-          background: ${theme.colors.background.default};
-          color: ${theme.colors.text.primary};
+          background: var(--card-color);
+          color: white;
           cursor: pointer;
           transition: all 0.2s;
-          font-weight: 500;
         }
 
-        .action-button:hover {
-          background: ${theme.colors.background.dark};
-          color: white;
-          transform: scale(1.05);
+        .stat-card button:hover {
+          filter: brightness(1.1);
+          transform: translateY(-1px);
         }
 
-        .quick-actions {
-          background: white;
-          padding: 2rem;
-          border-radius: ${theme.borderRadius.lg};
-          box-shadow: ${theme.shadows.md};
+        .stat-card button:hover {
+          opacity: 0.9;
         }
 
-        .quick-actions h2 {
+        .section-title {
+          margin: 2rem 0;
           color: ${theme.colors.text.primary};
-          margin-bottom: 2rem;
-          font-size: 1.8rem;
-          text-align: center;
         }
 
-        .action-grid {
+        .quick-actions-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-          gap: 2rem;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 1.5rem;
         }
 
         .quick-action-card {
-          padding: 2rem;
+          padding: 1.5rem;
           border-radius: ${theme.borderRadius.lg};
-          cursor: pointer;
-          transition: all 0.3s ease;
-          text-align: center;
           color: white;
+          cursor: pointer;
+          transition: transform 0.2s;
         }
 
         .quick-action-card:hover {
-          transform: scale(1.05);
-          box-shadow: ${theme.shadows.lg};
+          transform: translateY(-2px);
         }
 
         .action-icon {
-          font-size: 3rem;
+          font-size: 2rem;
           display: block;
           margin-bottom: 1rem;
         }
 
         .quick-action-card h3 {
-          margin: 0 0 1rem 0;
-          font-size: 1.5rem;
+          margin: 0 0 0.5rem 0;
+          font-size: 1.2rem;
         }
 
         .quick-action-card p {
           margin: 0;
           opacity: 0.9;
-        }
-
-        .loading-screen, .error-screen {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: calc(100vh - 64px);
-          font-size: 1.2rem;
-        }
-
-        .loading-spinner {
-          width: 50px;
-          height: 50px;
-          border: 5px solid ${theme.colors.background.default};
-          border-top: 5px solid ${theme.colors.primary.main};
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        .error-screen {
-          color: ${theme.colors.error.main};
-          text-align: center;
-          padding: 2rem;
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          font-size: 0.9rem;
         }
       `}</style>
     </>

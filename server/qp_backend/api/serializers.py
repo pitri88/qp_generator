@@ -39,18 +39,43 @@ class CourseSerializer(serializers.ModelSerializer):
 class UnitSerializer(serializers.ModelSerializer):
     class Meta:
         model = Unit
-        fields = '__all__'
+        fields = ['unit_id', 'unit_name']
 
 # Question Serializer
 class QuestionSerializer(serializers.ModelSerializer):
+    unit = UnitSerializer(read_only=True)
+    course_id = serializers.CharField(write_only=True)
+    
     class Meta:
         model = Question
-        fields = '__all__'
+        fields = [
+            'q_id', 
+            'text', 
+            'unit_id',
+            'unit',
+            'course_id',
+            'co', 
+            'bt', 
+            'marks', 
+            'difficulty_level',
+            'type'
+        ]
 
-    def validate_unit(self, value):
-        if not Unit.objects.filter(id=value.id).exists():
-            raise serializers.ValidationError("The specified unit does not exist.")
-        return value
+    def validate(self, data):
+        unit_id = data.get('unit_id')
+        course_id = data.get('course_id')
+        
+        try:
+            # Get the specific unit for this course
+            unit = Unit.objects.get(unit_id=unit_id, course_id=course_id)
+            data['unit_id'] = unit
+            data['course_id'] = unit.course_id
+        except Unit.DoesNotExist:
+            raise serializers.ValidationError("The specified unit does not exist for this course.")
+        except Unit.MultipleObjectsReturned:
+            raise serializers.ValidationError("Multiple units found. This should not happen.")
+        
+        return data
 
 # Question Media Serializer
 class QuestionMediaSerializer(serializers.ModelSerializer):
